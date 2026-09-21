@@ -1,10 +1,11 @@
 import { ToolError } from '../shared/errors';
-import { validateJpegFile, validatePngFile } from '../shared/validation';
+import { validateJpegFile, validatePngFile, validateWebpFile } from '../shared/validation';
 import { imageWorkerClient } from './worker/worker-client';
 import type { ImageWorkerRequest, WorkerProgressStage } from './worker/worker-types';
 
 export interface ImageConvertOptions {
   targetFormat: 'png' | 'jpg' | 'webp';
+  sourceFormat?: 'png' | 'jpg' | 'webp';
   quality?: number; // 0.1 to 1.0
   backgroundColor?: string;
 }
@@ -16,6 +17,11 @@ export interface PngToJpgOptions {
 
 export interface JpgToWebpOptions {
   quality?: number; // 0.7, 0.8, 0.9 (default: 0.9)
+}
+
+export interface WebpToJpgOptions {
+  quality?: number; // 0.7, 0.8, 0.9 (default: 0.9)
+  backgroundColor?: string; // '#FFFFFF' (default) or '#000000'
 }
 
 export interface ImageProcessingResult {
@@ -50,6 +56,7 @@ export async function convertPngToJpg(
   return convertImage(
     file,
     {
+      sourceFormat: 'png',
       targetFormat: 'jpg',
       quality: options.quality ?? 0.9,
       backgroundColor: options.backgroundColor ?? '#FFFFFF',
@@ -70,8 +77,30 @@ export async function convertJpgToWebp(
   return convertImage(
     file,
     {
+      sourceFormat: 'jpg',
       targetFormat: 'webp',
       quality: options.quality ?? 0.9,
+    },
+    onProgress
+  );
+}
+
+/**
+ * Converts a WebP file into a JPG entirely client-side in the browser.
+ * Handles solid background compositing for transparency and adjustable JPEG quality.
+ */
+export async function convertWebpToJpg(
+  file: File,
+  options: WebpToJpgOptions = {},
+  onProgress?: (progress: number, stage?: WorkerProgressStage) => void
+): Promise<ImageProcessingResult> {
+  return convertImage(
+    file,
+    {
+      sourceFormat: 'webp',
+      targetFormat: 'jpg',
+      quality: options.quality ?? 0.9,
+      backgroundColor: options.backgroundColor ?? '#FFFFFF',
     },
     onProgress
   );
@@ -86,7 +115,17 @@ export async function convertImage(
   onProgress?: (progress: number, stage?: WorkerProgressStage) => void
 ): Promise<ImageProcessingResult> {
   // 1. Initial Validation Pipeline (Size -> Ext -> MIME -> Magic Bytes)
-  if (options.targetFormat === 'png' || options.targetFormat === 'webp') {
+  const isWebpSource =
+    options.sourceFormat === 'webp' ||
+    (options.targetFormat === 'jpg' && file.name.toLowerCase().endsWith('.webp'));
+
+  if (isWebpSource) {
+    onProgress?.(10, 'validating');
+    const validation = await validateWebpFile(file);
+    if (!validation.valid && validation.error) {
+      throw validation.error;
+    }
+  } else if (options.targetFormat === 'png' || options.targetFormat === 'webp') {
     onProgress?.(10, 'validating');
     const validation = await validateJpegFile(file);
     if (!validation.valid && validation.error) {
@@ -109,14 +148,21 @@ export async function convertImage(
       ? crypto.randomUUID()
       : `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
+  const defaultInputMime = isWebpSource
+    ? 'image/webp'
+    : options.targetFormat === 'jpg'
+    ? 'image/png'
+    : 'image/jpeg';
+
   const request: ImageWorkerRequest = {
     id: taskId,
     operation: 'convert',
     fileData: buffer,
     fileName: file.name,
-    mimeType: file.type || (options.targetFormat === 'jpg' ? 'image/png' : 'image/jpeg'),
+    mimeType: file.type || defaultInputMime,
     options: {
       targetFormat: options.targetFormat,
+      sourceFormat: options.sourceFormat || (isWebpSource ? 'webp' : undefined),
       quality: options.quality,
       backgroundColor: options.backgroundColor,
     },
@@ -152,11 +198,22 @@ export async function convertImage(
     );
   }
 
+  // Explicit verification for JPEG output to prevent accidental PNG or WebP fallback
+  if (
+    options.targetFormat === 'jpg' &&
+    (response.resultMime !== 'image/jpeg' || resultBlob.type !== 'image/jpeg' || resultBlob.size <= 0)
+  ) {
+    throw new ToolError(
+      'UNSUPPORTED_FORMAT',
+      'Your browser could not create a JPG image. Please try another browser.'
+    );
+  }
+
   const fallbackFileName =
     options.targetFormat === 'webp'
       ? file.name.replace(/\.(jpe?g)$/i, '.webp')
       : options.targetFormat === 'jpg'
-      ? file.name.replace(/\.png$/i, '.jpg')
+      ? file.name.replace(/\.(webp|png)$/i, '.jpg')
       : file.name.replace(/\.(jpe?g)$/i, '.png');
 
   return {

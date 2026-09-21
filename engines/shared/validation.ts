@@ -106,14 +106,32 @@ export function hasPngMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
 }
 
 /**
+ * Checks if the given buffer starts with RIFF (bytes 0-3) and WEBP (bytes 8-11)
+ */
+export function hasWebpMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  if (bytes.length < 12) return false;
+  return (
+    bytes[0] === 0x52 && // 'R'
+    bytes[1] === 0x49 && // 'I'
+    bytes[2] === 0x46 && // 'F'
+    bytes[3] === 0x46 && // 'F'
+    bytes[8] === 0x57 && // 'W'
+    bytes[9] === 0x45 && // 'E'
+    bytes[10] === 0x42 && // 'B'
+    bytes[11] === 0x50    // 'P'
+  );
+}
+
+/**
  * Validates magic-byte signature from the first bytes of a file.
  */
 export async function validateMagicBytes(
   file: File | Blob,
-  expectedType: 'jpeg' | 'png' | 'pdf' = 'jpeg'
+  expectedType: 'jpeg' | 'png' | 'pdf' | 'webp' = 'jpeg'
 ): Promise<ValidationResult> {
   try {
-    const slice = file.slice(0, 8);
+    const slice = file.slice(0, 16);
     const buffer = await slice.arrayBuffer();
     const bytes = new Uint8Array(buffer);
 
@@ -130,6 +148,14 @@ export async function validateMagicBytes(
         return {
           valid: false,
           error: new ToolError('INVALID_FILE', 'This file is not a valid PNG image.'),
+        };
+      }
+    } else if (expectedType === 'webp') {
+      // WebP container signature: RIFF at bytes 0-3, WEBP at bytes 8-11
+      if (!hasWebpMagicBytes(bytes)) {
+        return {
+          valid: false,
+          error: new ToolError('INVALID_FILE', 'This file is not a valid WebP image.'),
         };
       }
     } else if (expectedType === 'pdf') {
@@ -153,6 +179,8 @@ export async function validateMagicBytes(
     const errorMsg =
       expectedType === 'png'
         ? 'This file is not a valid PNG image.'
+        : expectedType === 'webp'
+        ? 'This file is not a valid WebP image.'
         : expectedType === 'pdf'
         ? 'This file is not a valid PDF document.'
         : 'This file is not a valid JPEG image.';
@@ -234,6 +262,49 @@ export async function validateJpegFile(file: File): Promise<ValidationResult> {
 
   // 4. Magic byte validation (FF D8 FF)
   const magicCheck = await validateMagicBytes(file, 'jpeg');
+  if (!magicCheck.valid) {
+    return magicCheck;
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Complete validation pipeline for WebP files:
+ * File -> Size -> Extension -> MIME -> Magic Bytes -> Ready
+ */
+export async function validateWebpFile(file: File): Promise<ValidationResult> {
+  // 1. Size validation
+  if (file.size > VALIDATION_LIMITS.MAX_IMAGE_SIZE_BYTES) {
+    return {
+      valid: false,
+      error: new ToolError('FILE_TOO_LARGE', 'This file is too large. Maximum size is 50 MB.'),
+    };
+  }
+
+  // 2. Extension validation
+  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+  if (ext !== 'webp') {
+    return {
+      valid: false,
+      error: new ToolError('UNSUPPORTED_FORMAT', 'Only WebP files are supported.'),
+    };
+  }
+
+  // 3. MIME validation (if MIME provided by browser)
+  if (
+    file.type &&
+    file.type.toLowerCase() !== 'image/webp' &&
+    file.type.toLowerCase() !== 'application/octet-stream'
+  ) {
+    return {
+      valid: false,
+      error: new ToolError('UNSUPPORTED_FORMAT', 'Only WebP files are supported.'),
+    };
+  }
+
+  // 4. Magic byte validation (RIFF....WEBP)
+  const magicCheck = await validateMagicBytes(file, 'webp');
   if (!magicCheck.valid) {
     return magicCheck;
   }

@@ -25,6 +25,23 @@ function isPng(bytes: Uint8Array): boolean {
 }
 
 /**
+ * Checks if buffer starts with RIFF (bytes 0-3) and WEBP (bytes 8-11)
+ */
+function isWebp(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 && // 'R'
+    bytes[1] === 0x49 && // 'I'
+    bytes[2] === 0x46 && // 'F'
+    bytes[3] === 0x46 && // 'F'
+    bytes[8] === 0x57 && // 'W'
+    bytes[9] === 0x45 && // 'E'
+    bytes[10] === 0x42 && // 'B'
+    bytes[11] === 0x50    // 'P'
+  );
+}
+
+/**
  * Replaces extension with .png
  */
 function toPngFilename(name: string): string {
@@ -76,13 +93,35 @@ export async function processImageJob(
 
   const isTargetJpg = options.targetFormat === 'jpg';
   const isTargetWebp = options.targetFormat === 'webp';
-  const expectedInputDesc = isTargetJpg ? 'PNG' : 'JPEG';
+
+  const isSourceWebp =
+    options.sourceFormat === 'webp' ||
+    fileName.toLowerCase().endsWith('.webp') ||
+    request.mimeType === 'image/webp';
+  const isSourcePng =
+    options.sourceFormat === 'png' ||
+    (!isSourceWebp && (fileName.toLowerCase().endsWith('.png') || request.mimeType === 'image/png' || (isTargetJpg && !isSourceWebp)));
+  const isSourceJpg =
+    options.sourceFormat === 'jpg' ||
+    (!isSourceWebp && !isSourcePng);
+
+  const expectedInputDesc = isSourceWebp ? 'WebP' : isSourcePng ? 'PNG' : 'JPEG';
 
   // 1. Validating Stage (0 - 20%)
   postProgress?.('validating', 15);
   const bytes = new Uint8Array(fileData);
 
-  if (isTargetJpg) {
+  if (isSourceWebp) {
+    if (!isWebp(bytes)) {
+      return {
+        id,
+        success: false,
+        type: 'error',
+        error: 'This file is not a valid WebP image.',
+        errorCode: 'INVALID_FILE',
+      };
+    }
+  } else if (isSourcePng) {
     if (!isPng(bytes)) {
       return {
         id,
@@ -107,7 +146,7 @@ export async function processImageJob(
   // 2. Reading Stage (20 - 45%)
   postProgress?.('reading', 35);
   const originalSize = fileData.byteLength;
-  const inputMime = isTargetJpg ? 'image/png' : 'image/jpeg';
+  const inputMime = isSourceWebp ? 'image/webp' : isSourcePng ? 'image/png' : 'image/jpeg';
   const blob = new Blob([fileData], { type: inputMime });
 
   // 3. Decoding Stage (45 - 70%)
@@ -115,11 +154,15 @@ export async function processImageJob(
   let bitmap: ImageBitmap;
   try {
     if (typeof createImageBitmap === 'function') {
-      try {
-        // Automatically handle EXIF orientation to preserve correct photograph orientation
-        bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
-      } catch {
-        // Fallback if imageOrientation option is not supported
+      if (isSourceJpg) {
+        try {
+          // Automatically handle EXIF orientation to preserve correct photograph orientation
+          bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+        } catch {
+          // Fallback if imageOrientation option is not supported
+          bitmap = await createImageBitmap(blob);
+        }
+      } else {
         bitmap = await createImageBitmap(blob);
       }
     } else {
@@ -210,6 +253,17 @@ export async function processImageJob(
           errorCode: 'UNSUPPORTED_FORMAT',
         };
       }
+
+      // Validate JPEG output to reject accidental PNG or WebP fallback
+      if (isTargetJpg && (encodedBlob.type !== 'image/jpeg' || encodedBlob.size <= 0)) {
+        return {
+          id,
+          success: false,
+          type: 'error',
+          error: 'Your browser could not create a JPG image. Please try another browser.',
+          errorCode: 'UNSUPPORTED_FORMAT',
+        };
+      }
     } else if (typeof document !== 'undefined') {
       const canvas = document.createElement('canvas');
       canvas.width = width;
@@ -254,6 +308,17 @@ export async function processImageJob(
           success: false,
           type: 'error',
           error: 'Your browser could not create a WebP image. Please try another browser.',
+          errorCode: 'UNSUPPORTED_FORMAT',
+        };
+      }
+
+      // Validate JPEG output to reject accidental PNG or WebP fallback
+      if (isTargetJpg && (encodedBlob.type !== 'image/jpeg' || encodedBlob.size <= 0)) {
+        return {
+          id,
+          success: false,
+          type: 'error',
+          error: 'Your browser could not create a JPG image. Please try another browser.',
           errorCode: 'UNSUPPORTED_FORMAT',
         };
       }

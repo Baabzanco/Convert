@@ -188,25 +188,68 @@ export const TOOLS: ToolDefinition[] = [
   // 4. WEBP to JPG
   {
     slug: 'webp-to-jpg',
-    name: 'WEBP to JPG',
+    name: 'WebP to JPG',
     category: 'image-converter',
     inputFormats: ['webp'],
     outputFormats: ['jpg'],
     engine: 'image-convert',
     clientSide: true,
-    title: 'WEBP to JPG Converter – Fast & Free Online Utility',
-    description: 'Convert WEBP files to universal JPG format for compatibility with older software, image viewers, and legacy systems.',
+    title: 'Convert WEBP to JPG – Fast, Free & Browser-Based',
+    description: 'Convert WEBP images to JPG format directly in your browser. Choose JPG quality, choose background color for transparent areas, convert multiple files, and download individually or as a ZIP.',
     h1: 'Convert WEBP to JPG',
-    intro: 'Turn modern WEBP graphics into universally compatible JPG files for offline presentations, printing, and legacy photo editors.',
+    intro: 'Convert your WEBP images into universally compatible JPG format directly in your web browser. WebP is great for modern websites, but older photo viewers, desktop editors, and legacy workflows still require standard JPEG files. Our converter processes everything locally on your device—your source photos are never uploaded to our server. Choose your JPG quality preset, select a solid white or black background for transparent areas, convert multiple files up to 50 MB each, and download outputs individually or as a single ZIP archive with no registration required.',
     howTo: [
-      { title: 'Upload WEBP image', description: 'Choose your WEBP file from your device.' },
-      { title: 'Verify conversion', description: 'Check output settings.' },
-      { title: 'Download JPG', description: 'Save your standard JPG image.' },
+      { title: 'Upload your WEBP files', description: 'Drag and drop your WEBP images into the upload area or click to select files from your device (up to 20 files, 50 MB each).' },
+      { title: 'Choose your JPG quality and background color', description: 'Select your preferred JPG quality (High 90%, Medium 80%, Low 70%) and a solid white or black background for any transparent areas.' },
+      { title: 'Click Convert to JPG', description: 'Click the Convert to JPG button to begin instant, client-side processing in your browser.' },
+      { title: 'Download your JPG files', description: 'Download each converted JPG image individually or save all converted files at once in a convenient ZIP archive.' },
+    ],
+    features: [
+      { title: 'WEBP to JPG Conversion', description: 'Easily convert modern WebP images into universal JPG photos compatible with any device or software.' },
+      { title: 'Multiple Files Batch Processing', description: 'Upload and convert up to 20 WebP files at once with real-time individual and batch progress tracking.' },
+      { title: '50 MB Per File Limit', description: 'Support for high-resolution graphics and large photo exports up to 50 MB per file.' },
+      { title: 'JPG Quality Options', description: 'Choose between High (90%), Medium (80%), or Low (70%) compression presets to optimize clarity and size.' },
+      { title: 'Background Options for Transparency', description: 'Seamlessly composite transparent and semi-transparent WebP pixels onto a solid white or black background.' },
+      { title: 'Original Dimensions Preserved', description: 'Retains the exact original pixel width and height without unwanted resizing, cropping, or distortion.' },
+      { title: 'Browser-Based Processing', description: 'Conversions execute entirely inside your browser using HTML5 Canvas and Web Workers. Source files never touch our servers.' },
+      { title: 'No Registration', description: '100% free to use with no account required, no email collection, no subscriptions, and no watermarks.' },
+      { title: 'Individual and ZIP Downloads', description: 'Download your converted JPEG files one by one or bundle all files into a single webp-to-jpg-files.zip archive.' },
     ],
     faq: [
-      { question: 'Can I open the resulting JPG on any device?', answer: 'Yes, JPG is supported by virtually every operating system, image editor, and device in existence.' },
+      {
+        question: 'What is the difference between WebP and JPG?',
+        answer: 'WebP is a modern web format supporting lossy/lossless compression and alpha transparency, while JPG is the universal standard format for photographs supported by virtually every software and device.',
+      },
+      {
+        question: 'Why convert WebP to JPG?',
+        answer: 'While WebP works well on modern web browsers, many desktop photo editors, older operating systems, office applications, and printing services still require JPG files.',
+      },
+      {
+        question: 'What happens to transparent areas in WebP?',
+        answer: 'Because the JPG format does not support transparency, any transparent or partially transparent pixels are composited onto your chosen solid background color (White or Black) before JPEG encoding.',
+      },
+      {
+        question: 'Can I convert multiple WebP files at once?',
+        answer: 'Yes, you can upload and convert up to 20 WebP files at the same time and download them individually or as a single ZIP archive.',
+      },
+      {
+        question: 'Will the image dimensions change?',
+        answer: 'No, the converted JPG image preserves the exact width and height in pixels of your source WebP image.',
+      },
+      {
+        question: 'Can I choose JPG quality?',
+        answer: 'Yes, you can select from three JPG quality presets: High (90%), Medium (80%), or Low (70%). Higher quality produces larger files, while lower quality yields smaller files.',
+      },
+      {
+        question: 'Are my WebP files uploaded to a server?',
+        answer: 'No, all processing happens entirely inside your browser on your device using client-side Web Workers and HTML5 Canvas. Your files are never sent to our server.',
+      },
+      {
+        question: 'Is WEBP to JPG conversion free?',
+        answer: 'Yes, this converter is completely free to use with no registration, no file counts, and no hidden subscriptions.',
+      },
     ],
-    relatedTools: ['jpg-to-webp', 'webp-to-png', 'compress-image'],
+    relatedTools: ['jpg-to-png', 'png-to-jpg', 'jpg-to-webp'],
   },
 
   // 5. PNG to WEBP
