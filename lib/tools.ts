@@ -881,6 +881,44 @@ export const TOOLS: ToolDefinition[] = [
     ],
     relatedTools: ['delete-pdf-pages', 'rotate-pdf', 'merge-pdf'],
   },
+
+  // 13. Crop Image
+  {
+    slug: 'crop-image',
+    name: 'Crop Image',
+    category: 'image-utility',
+    inputFormats: ['jpg', 'jpeg', 'png', 'webp'],
+    outputFormats: ['original', 'jpg', 'png', 'webp'],
+    engine: 'image-crop',
+    clientSide: true,
+    title: 'Crop Images Online – Free Visual Browser-Based Image Cropper',
+    description: 'Crop JPG, PNG, and WebP images online with free aspect ratio presets (Free, 1:1, 4:3, 16:9). Fast, secure, and 100% browser-based with no server uploads.',
+    h1: 'Crop Images Online',
+    intro: 'Crop your JPG, PNG, or WebP images visually right inside your web browser. Select exact aspect ratios including Free, 1:1, 4:3, and 16:9, adjust the crop area with precise pointer and touch controls, and download your cropped image instantly. All processing happens locally on your device with no server uploads and no registration required.',
+    howTo: [
+      { title: 'Upload your image', description: 'Drag and drop your JPG, PNG, or WebP image into the upload zone or click to browse.' },
+      { title: 'Select aspect ratio', description: 'Choose between Free, 1:1 (Square), 4:3, or 16:9 aspect ratio modes.' },
+      { title: 'Adjust crop area', description: 'Drag the crop box or use corner handles to select the exact region you want to keep.' },
+      { title: 'Click Crop Image', description: 'Process the crop locally in your browser to generate the cropped result.' },
+      { title: 'Download cropped image', description: 'Save your cropped image in its original format or choose JPG, PNG, or WebP output.' },
+    ],
+    features: [
+      { title: 'Visual Crop Editor', description: 'Interactive visual cropping with smooth pointer and touch support.' },
+      { title: 'Aspect Ratio Presets', description: 'Quickly switch between Free, 1:1, 4:3, and 16:9 aspect ratios.' },
+      { title: 'Source Pixel Precision', description: 'Crops directly from the original source image without downscaling the preview.' },
+      { title: 'Multiple Output Formats', description: 'Export your cropped result in Original format, JPG, PNG, or WebP.' },
+      { title: 'Quality Controls', description: 'Adjust JPG and WebP compression quality presets (High, Medium, Low).' },
+      { title: 'Browser-Based & Private', description: 'Processing runs locally in your browser. Files are never uploaded to a server.' },
+    ],
+    faq: [
+      { question: 'How do I crop an image?', answer: 'Upload your image, choose an aspect ratio or Free mode, adjust the crop area using the visual handles, and click Crop Image.' },
+      { question: 'Which image formats are supported?', answer: 'We support JPG, JPEG, PNG, and static WebP files up to 50 MB.' },
+      { question: 'Can I crop to 1:1, 4:3, or 16:9?', answer: 'Yes! You can choose between Free aspect ratio or locked 1:1, 4:3, and 16:9 proportions.' },
+      { question: 'Will cropping change the image dimensions?', answer: 'Yes, the output dimensions will exactly equal the selected crop rectangle in source pixels.' },
+      { question: 'Are my images uploaded to a server?', answer: 'No. All cropping is performed locally in your browser using client-side Web Workers and Canvas APIs.' },
+    ],
+    relatedTools: ['resize-image', 'compress-image', 'jpg-to-png', 'png-to-jpg'],
+  },
 ];
 
 export function getToolBySlug(slug: string): ToolDefinition | undefined {

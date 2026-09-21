@@ -146,10 +146,11 @@ export async function processImageJob(
 
   const isCompress = operation === 'compress';
   const isResize = operation === 'resize';
+  const isCrop = operation === 'crop';
 
   if (
-    (!isCompress && !isResize && operation !== 'convert') ||
-    (!isCompress && !isResize && options.targetFormat !== 'png' && options.targetFormat !== 'jpg' && options.targetFormat !== 'webp')
+    (!isCompress && !isResize && !isCrop && operation !== 'convert') ||
+    (!isCompress && !isResize && !isCrop && options.targetFormat !== 'png' && options.targetFormat !== 'jpg' && options.targetFormat !== 'webp')
   ) {
     return {
       id,
@@ -168,7 +169,7 @@ export async function processImageJob(
   let isSourcePng = false;
   let isSourceJpg = false;
 
-  if (isCompress || isResize) {
+  if (isCompress || isResize || isCrop) {
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     const mime = (request.mimeType || '').toLowerCase();
     const optSrc = options.sourceFormat;
@@ -190,14 +191,16 @@ export async function processImageJob(
         id,
         success: false,
         type: 'error',
-        error: isResize
+        error: isCrop
+          ? 'Only JPG, JPEG, PNG, and WebP files are supported for cropping.'
+          : isResize
           ? 'Only JPG, JPEG, PNG, and WebP files are supported for resizing.'
           : 'Only JPG, JPEG, PNG, and WebP files are supported for compression.',
         errorCode: 'UNSUPPORTED_FORMAT',
       };
     }
 
-    if (isResize) {
+    if (isResize || isCrop) {
       const targetFormatOption = options.targetFormat;
       if (targetFormatOption === 'jpg') {
         isTargetJpg = true;
@@ -484,16 +487,45 @@ export async function processImageJob(
     };
   }
 
-  const targetWidth = isResize && typeof options.width === 'number' && options.width > 0 ? options.width : width;
-  const targetHeight = isResize && typeof options.height === 'number' && options.height > 0 ? options.height : height;
+  let cropSx = 0;
+  let cropSy = 0;
+  let cropSw = width;
+  let cropSh = height;
 
-  if (targetWidth > 8192 || targetHeight > 8192 || targetWidth <= 0 || targetHeight <= 0) {
+  if (isCrop) {
+    cropSx = Math.max(0, Math.round(Number(options.x) || 0));
+    cropSy = Math.max(0, Math.round(Number(options.y) || 0));
+    cropSw = Math.round(Number(options.width) || (width - cropSx));
+    cropSh = Math.round(Number(options.height) || (height - cropSy));
+
+    if (cropSx >= width) cropSx = width - 1;
+    if (cropSy >= height) cropSy = height - 1;
+    if (cropSx + cropSw > width) cropSw = width - cropSx;
+    if (cropSy + cropSh > height) cropSh = height - cropSy;
+    if (cropSw <= 0) cropSw = 1;
+    if (cropSh <= 0) cropSh = 1;
+  }
+
+  const targetWidth = isCrop
+    ? cropSw
+    : isResize && typeof options.width === 'number' && options.width > 0
+    ? options.width
+    : width;
+  const targetHeight = isCrop
+    ? cropSh
+    : isResize && typeof options.height === 'number' && options.height > 0
+    ? options.height
+    : height;
+
+  if (targetWidth > 8192 || targetHeight > 8192 || (targetWidth * targetHeight) > 67108864 || targetWidth <= 0 || targetHeight <= 0) {
     bitmap.close();
     return {
       id,
       success: false,
       type: 'error',
-      error: 'The selected dimensions are too large to process in your browser.',
+      error: isCrop
+        ? 'This crop is too large to process in your browser.'
+        : 'The selected dimensions are too large to process in your browser.',
       errorCode: 'BROWSER_MEMORY_ERROR',
     };
   }
@@ -536,7 +568,9 @@ export async function processImageJob(
           id,
           success: false,
           type: 'error',
-          error: isResize
+          error: isCrop
+            ? "We couldn't crop this image. Please try again."
+            : isResize
             ? "We couldn't resize this image. Please try again."
             : isCompress
             ? "We couldn't compress this image. Please try again."
@@ -552,7 +586,11 @@ export async function processImageJob(
       }
 
       // Draw decoded image on top
-      ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+      if (isCrop) {
+        ctx.drawImage(bitmap, cropSx, cropSy, cropSw, cropSh, 0, 0, targetWidth, targetHeight);
+      } else {
+        ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+      }
       bitmap.close(); // Immediate memory cleanup
 
       if (isTargetJpg || isTargetWebp) {
@@ -604,7 +642,9 @@ export async function processImageJob(
           id,
           success: false,
           type: 'error',
-          error: isResize
+          error: isCrop
+            ? "We couldn't crop this image. Please try again."
+            : isResize
             ? "We couldn't resize this image. Please try again."
             : isCompress
             ? "We couldn't compress this image. Please try again."
@@ -620,7 +660,11 @@ export async function processImageJob(
       }
 
       // Draw decoded image on top
-      ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+      if (isCrop) {
+        ctx.drawImage(bitmap, cropSx, cropSy, cropSw, cropSh, 0, 0, targetWidth, targetHeight);
+      } else {
+        ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+      }
       bitmap.close(); // Immediate memory cleanup
 
       encodedBlob = await new Promise<Blob>((resolve, reject) => {
@@ -684,7 +728,9 @@ export async function processImageJob(
         id,
         success: false,
         type: 'error',
-        error: isResize
+        error: isCrop
+          ? 'This image is too large to crop in your browser.'
+          : isResize
           ? 'This image is too large to resize in your browser.'
           : isCompress
           ? 'This image is too large to compress in your browser.'
@@ -696,7 +742,9 @@ export async function processImageJob(
       id,
       success: false,
       type: 'error',
-      error: isResize
+      error: isCrop
+        ? "We couldn't crop this image. Please try again."
+        : isResize
         ? "We couldn't resize this image. Please try again."
         : isCompress
         ? "We couldn't compress this image. Please try again."
@@ -718,7 +766,7 @@ export async function processImageJob(
 
   const outputFileName = isCompress
     ? fileName
-    : isResize
+    : (isResize || isCrop)
     ? (isTargetJpg
         ? toJpgFilename(fileName)
         : isTargetWebp

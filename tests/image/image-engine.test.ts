@@ -7,8 +7,8 @@ describe('Image Engine Base Architecture', () => {
     const converters = getToolsByCategory('image-converter');
     const utilities = getToolsByCategory('image-utility');
     expect(converters.length).toBe(10);
-    expect(utilities.length).toBe(5);
-    expect(converters.length + utilities.length).toBe(15);
+    expect(utilities.length).toBe(6);
+    expect(converters.length + utilities.length).toBe(16);
   });
 
   it('should resolve jpg-to-png tool definition correctly', () => {
