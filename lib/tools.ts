@@ -125,26 +125,64 @@ export const TOOLS: ToolDefinition[] = [
   // 3. JPG to WEBP
   {
     slug: 'jpg-to-webp',
-    name: 'JPG to WEBP',
+    name: 'JPG to WebP',
     category: 'image-converter',
     inputFormats: ['jpg', 'jpeg'],
     outputFormats: ['webp'],
     engine: 'image-convert',
     clientSide: true,
-    title: 'JPG to WEBP Converter – Next-Gen Image Compression',
-    description: 'Convert JPG to modern WEBP format for superior web compression, smaller file sizes, and faster page speeds.',
-    h1: 'Convert JPG to WEBP',
-    intro: 'Upgrade your JPG photos to Google WEBP format for modern websites. Reduce file size by up to 35% without losing visual clarity.',
+    title: 'Convert JPG to WebP – Fast, Free & Browser-Based',
+    description: 'Convert JPG and JPEG images to WebP format right in your browser. Choose your quality preset, convert multiple files, and download individually or as a ZIP.',
+    h1: 'Convert JPG to WebP',
+    intro: 'Convert your JPG and JPEG images into modern WebP format entirely inside your browser. Because processing happens on your device, your source photos are never uploaded to our server. Choose your preferred quality preset, convert multiple files up to 50 MB each, and download outputs individually or as a convenient ZIP archive with no registration required.',
     howTo: [
-      { title: 'Upload JPG', description: 'Drop your JPEG images into the upload box.' },
-      { title: 'Adjust compression', description: 'Choose your desired compression balance.' },
-      { title: 'Download WEBP', description: 'Retrieve your lightweight, high-performance WEBP images.' },
+      { title: 'Upload your JPG or JPEG files', description: 'Drop your JPG or JPEG files into the upload area or click to browse files from your device.' },
+      { title: 'Choose your WebP quality', description: 'Select High (90%), Medium (80%), or Low (70%) compression based on your file size and fidelity preferences.' },
+      { title: 'Click Convert to WebP', description: 'Start client-side conversion. Your images are converted directly in your browser without server uploads.' },
+      { title: 'Download your WebP files', description: 'Save each converted WebP image individually or download all files together in a single ZIP archive.' },
+    ],
+    features: [
+      { title: 'JPG to WebP Conversion', description: 'Convert standard JPG and JPEG photographs to modern WebP images with fast browser execution.' },
+      { title: 'JPG and JPEG Support', description: 'Accepts both .jpg and .jpeg files with full signature validation.' },
+      { title: 'Multiple Files Batch Processing', description: 'Process up to 20 images in a single batch with individual and batch progress indicators.' },
+      { title: '50 MB Per File Limit', description: 'Generous file size allowance up to 50 MB per image to handle high-resolution camera photos.' },
+      { title: 'Quality Presets', description: 'Choose between High (90%), Medium (80%), or Low (70%) quality presets for balanced compression.' },
+      { title: 'Original Dimensions Preserved', description: 'Preserves the exact width and height of each image without scaling, cropping, or distortion.' },
+      { title: 'Browser-Based Processing', description: 'All conversion happens on your local device. Source files are never uploaded to our server.' },
+      { title: 'No Registration', description: 'Completely free to use with no account, subscriptions, watermarks, or hidden fees.' },
+      { title: 'Individual & ZIP Downloads', description: 'Download your WebP images one by one or save the whole batch at once as a ZIP archive.' },
     ],
     faq: [
-      { question: 'Why should I convert JPG to WEBP?', answer: 'WEBP offers significantly smaller file sizes than JPG at comparable quality, speeding up websites and reducing bandwidth usage.' },
-      { question: 'Do all modern browsers support WEBP?', answer: 'Yes, all modern web browsers including Chrome, Safari, Firefox, and Edge fully support WEBP images.' },
+      {
+        question: 'What is WebP?',
+        answer: 'WebP is a modern image format developed by Google that provides superior lossy and lossless compression for web images, enabling smaller file sizes while maintaining comparable visual quality across modern web browsers.',
+      },
+      {
+        question: 'Why convert JPG to WebP?',
+        answer: 'Converting JPG to WebP can significantly reduce file size without noticeable loss of visual clarity, helping websites load faster and save bandwidth.',
+      },
+      {
+        question: 'Can I convert multiple JPG files at once?',
+        answer: 'Yes, you can upload and convert up to 20 JPG or JPEG files at once, and download them either individually or together as a ZIP archive.',
+      },
+      {
+        question: 'Will the image dimensions change?',
+        answer: 'No, the converted WebP image retains the exact original pixel width and height of your source image.',
+      },
+      {
+        question: 'Can I choose WebP quality?',
+        answer: 'Yes, you can select from three quality presets: High (90%), Medium (80%), or Low (70%). Higher quality preserves finer detail, while lower quality yields smaller files.',
+      },
+      {
+        question: 'Are my JPG files uploaded to a server?',
+        answer: 'No, all processing is performed locally in your web browser using HTML5 Canvas and Web Worker technology. Your source files are never uploaded to our server.',
+      },
+      {
+        question: 'Is JPG to WebP conversion free?',
+        answer: 'Yes, the tool is 100% free to use with no registration, usage limits, or watermarks.',
+      },
     ],
-    relatedTools: ['webp-to-jpg', 'png-to-webp', 'compress-image'],
+    relatedTools: ['jpg-to-png', 'png-to-jpg', 'webp-to-jpg', 'png-to-webp'],
   },
 
   // 4. WEBP to JPG

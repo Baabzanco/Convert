@@ -43,6 +43,15 @@ function toJpgFilename(name: string): string {
 }
 
 /**
+ * Replaces extension with .webp
+ */
+function toWebpFilename(name: string): string {
+  const lastDot = name.lastIndexOf('.');
+  const stem = lastDot === -1 ? name : name.substring(0, lastDot);
+  return `${stem}.webp`;
+}
+
+/**
  * Core image processing logic.
  * Usable inside Web Worker and as direct fallback.
  */
@@ -52,7 +61,10 @@ export async function processImageJob(
 ): Promise<ImageWorkerResponse> {
   const { id, fileData, fileName, operation, options } = request;
 
-  if (operation !== 'convert' || (options.targetFormat !== 'png' && options.targetFormat !== 'jpg')) {
+  if (
+    operation !== 'convert' ||
+    (options.targetFormat !== 'png' && options.targetFormat !== 'jpg' && options.targetFormat !== 'webp')
+  ) {
     return {
       id,
       success: false,
@@ -63,6 +75,7 @@ export async function processImageJob(
   }
 
   const isTargetJpg = options.targetFormat === 'jpg';
+  const isTargetWebp = options.targetFormat === 'webp';
   const expectedInputDesc = isTargetJpg ? 'PNG' : 'JPEG';
 
   // 1. Validating Stage (0 - 20%)
@@ -150,7 +163,7 @@ export async function processImageJob(
   postProgress?.('encoding', 85);
   let encodedBlob: Blob;
 
-  const targetMime = isTargetJpg ? 'image/jpeg' : 'image/png';
+  const targetMime = isTargetWebp ? 'image/webp' : isTargetJpg ? 'image/jpeg' : 'image/png';
   const quality = typeof options.quality === 'number' ? Math.max(0.1, Math.min(1.0, options.quality)) : 0.9;
   const rawBg = typeof options.backgroundColor === 'string' ? options.backgroundColor.trim() : '';
   const backgroundColor =
@@ -181,10 +194,21 @@ export async function processImageJob(
       ctx.drawImage(bitmap, 0, 0);
       bitmap.close(); // Immediate memory cleanup
 
-      if (isTargetJpg) {
+      if (isTargetJpg || isTargetWebp) {
         encodedBlob = await canvas.convertToBlob({ type: targetMime, quality });
       } else {
         encodedBlob = await canvas.convertToBlob({ type: targetMime });
+      }
+
+      // Validate WebP output to reject accidental PNG or JPEG fallback
+      if (isTargetWebp && (encodedBlob.type !== 'image/webp' || encodedBlob.size <= 0)) {
+        return {
+          id,
+          success: false,
+          type: 'error',
+          error: 'Your browser could not create a WebP image. Please try another browser.',
+          errorCode: 'UNSUPPORTED_FORMAT',
+        };
       }
     } else if (typeof document !== 'undefined') {
       const canvas = document.createElement('canvas');
@@ -216,12 +240,23 @@ export async function processImageJob(
         canvas.toBlob(
           (b) => {
             if (b) resolve(b);
-            else reject(new Error(`Canvas encoding to ${isTargetJpg ? 'JPEG' : 'PNG'} failed`));
+            else reject(new Error(`Canvas encoding to ${targetMime} failed`));
           },
           targetMime,
-          isTargetJpg ? quality : undefined
+          isTargetJpg || isTargetWebp ? quality : undefined
         );
       });
+
+      // Validate WebP output to reject accidental PNG or JPEG fallback
+      if (isTargetWebp && (encodedBlob.type !== 'image/webp' || encodedBlob.size <= 0)) {
+        return {
+          id,
+          success: false,
+          type: 'error',
+          error: 'Your browser could not create a WebP image. Please try another browser.',
+          errorCode: 'UNSUPPORTED_FORMAT',
+        };
+      }
     } else {
       bitmap.close();
       return {
@@ -258,7 +293,11 @@ export async function processImageJob(
   const resultData = await encodedBlob.arrayBuffer();
   postProgress?.('finalizing', 100);
 
-  const outputFileName = isTargetJpg ? toJpgFilename(fileName) : toPngFilename(fileName);
+  const outputFileName = isTargetWebp
+    ? toWebpFilename(fileName)
+    : isTargetJpg
+    ? toJpgFilename(fileName)
+    : toPngFilename(fileName);
 
   return {
     id,

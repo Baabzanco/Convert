@@ -14,6 +14,10 @@ export interface PngToJpgOptions {
   backgroundColor?: string; // '#FFFFFF' (default) or '#000000'
 }
 
+export interface JpgToWebpOptions {
+  quality?: number; // 0.7, 0.8, 0.9 (default: 0.9)
+}
+
 export interface ImageProcessingResult {
   blob: Blob;
   fileName: string;
@@ -55,6 +59,25 @@ export async function convertPngToJpg(
 }
 
 /**
+ * Converts a JPEG file into a WebP entirely client-side in the browser.
+ * Preserves original dimensions, handles orientation, and validates WebP output.
+ */
+export async function convertJpgToWebp(
+  file: File,
+  options: JpgToWebpOptions = {},
+  onProgress?: (progress: number, stage?: WorkerProgressStage) => void
+): Promise<ImageProcessingResult> {
+  return convertImage(
+    file,
+    {
+      targetFormat: 'webp',
+      quality: options.quality ?? 0.9,
+    },
+    onProgress
+  );
+}
+
+/**
  * Image conversion engine coordinating validation, workers, and encoding.
  */
 export async function convertImage(
@@ -63,7 +86,7 @@ export async function convertImage(
   onProgress?: (progress: number, stage?: WorkerProgressStage) => void
 ): Promise<ImageProcessingResult> {
   // 1. Initial Validation Pipeline (Size -> Ext -> MIME -> Magic Bytes)
-  if (options.targetFormat === 'png') {
+  if (options.targetFormat === 'png' || options.targetFormat === 'webp') {
     onProgress?.(10, 'validating');
     const validation = await validateJpegFile(file);
     if (!validation.valid && validation.error) {
@@ -110,10 +133,29 @@ export async function convertImage(
     throw new ToolError(code, message);
   }
 
-  const defaultMime = options.targetFormat === 'jpg' ? 'image/jpeg' : 'image/png';
+  const defaultMime =
+    options.targetFormat === 'webp'
+      ? 'image/webp'
+      : options.targetFormat === 'jpg'
+      ? 'image/jpeg'
+      : 'image/png';
   const resultBlob = new Blob([response.resultData], { type: response.resultMime || defaultMime });
+
+  // Explicit verification for WebP output to prevent accidental PNG or JPEG fallback
+  if (
+    options.targetFormat === 'webp' &&
+    (response.resultMime !== 'image/webp' || resultBlob.type !== 'image/webp' || resultBlob.size <= 0)
+  ) {
+    throw new ToolError(
+      'UNSUPPORTED_FORMAT',
+      'Your browser could not create a WebP image. Please try another browser.'
+    );
+  }
+
   const fallbackFileName =
-    options.targetFormat === 'jpg'
+    options.targetFormat === 'webp'
+      ? file.name.replace(/\.(jpe?g)$/i, '.webp')
+      : options.targetFormat === 'jpg'
       ? file.name.replace(/\.png$/i, '.jpg')
       : file.name.replace(/\.(jpe?g)$/i, '.png');
 

@@ -12,6 +12,7 @@ import FileList from './FileList';
 import { FileItemData } from './FileItem';
 import JpgToPngController from './JpgToPngController';
 import PngToJpgController from './PngToJpgController';
+import JpgToWebpController from './JpgToWebpController';
 import { ShieldCheck, Zap, Lock, Cpu, Sparkles } from 'lucide-react';
 import JsonLd from '@/components/seo/JsonLd';
 import { createWebApplicationSchema, createBreadcrumbSchema, siteConfig } from '@/lib/seo';
@@ -82,6 +83,8 @@ export function ToolPage({ tool }: ToolPageProps) {
             <JpgToPngController />
           ) : tool.slug === 'png-to-jpg' ? (
             <PngToJpgController />
+          ) : tool.slug === 'jpg-to-webp' ? (
+            <JpgToWebpController />
           ) : (
             <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-card p-6 md:p-8 shadow-subtle mb-6">
               <div className="max-w-2xl mx-auto space-y-6">
