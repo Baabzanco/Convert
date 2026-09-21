@@ -145,10 +145,11 @@ export async function processImageJob(
   const { id, fileData, fileName, operation, options } = request;
 
   const isCompress = operation === 'compress';
+  const isResize = operation === 'resize';
 
   if (
-    (!isCompress && operation !== 'convert') ||
-    (!isCompress && options.targetFormat !== 'png' && options.targetFormat !== 'jpg' && options.targetFormat !== 'webp')
+    (!isCompress && !isResize && operation !== 'convert') ||
+    (!isCompress && !isResize && options.targetFormat !== 'png' && options.targetFormat !== 'jpg' && options.targetFormat !== 'webp')
   ) {
     return {
       id,
@@ -167,7 +168,7 @@ export async function processImageJob(
   let isSourcePng = false;
   let isSourceJpg = false;
 
-  if (isCompress) {
+  if (isCompress || isResize) {
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     const mime = (request.mimeType || '').toLowerCase();
     const optSrc = options.sourceFormat;
@@ -176,22 +177,39 @@ export async function processImageJob(
       isSourcePng = true;
     } else if (optSrc === 'webp' || (!optSrc && (ext === 'webp' || mime === 'image/webp'))) {
       isSourceWebp = true;
-      isTargetWebp = true;
+      if (isCompress) isTargetWebp = true;
     } else if (
       optSrc === 'jpg' ||
       optSrc === 'jpeg' ||
       (!optSrc && (ext === 'jpg' || ext === 'jpeg' || mime === 'image/jpeg'))
     ) {
       isSourceJpg = true;
-      isTargetJpg = true;
+      if (isCompress) isTargetJpg = true;
     } else {
       return {
         id,
         success: false,
         type: 'error',
-        error: 'Only JPG, JPEG, PNG, and WebP files are supported for compression.',
+        error: isResize
+          ? 'Only JPG, JPEG, PNG, and WebP files are supported for resizing.'
+          : 'Only JPG, JPEG, PNG, and WebP files are supported for compression.',
         errorCode: 'UNSUPPORTED_FORMAT',
       };
+    }
+
+    if (isResize) {
+      const targetFormatOption = options.targetFormat;
+      if (targetFormatOption === 'jpg') {
+        isTargetJpg = true;
+      } else if (targetFormatOption === 'webp') {
+        isTargetWebp = true;
+      } else if (targetFormatOption === 'png') {
+        // png target
+      } else {
+        // original format
+        if (isSourceJpg) isTargetJpg = true;
+        else if (isSourceWebp) isTargetWebp = true;
+      }
     }
   } else {
     isTargetJpg = options.targetFormat === 'jpg';
@@ -466,6 +484,20 @@ export async function processImageJob(
     };
   }
 
+  const targetWidth = isResize && typeof options.width === 'number' && options.width > 0 ? options.width : width;
+  const targetHeight = isResize && typeof options.height === 'number' && options.height > 0 ? options.height : height;
+
+  if (targetWidth > 8192 || targetHeight > 8192 || targetWidth <= 0 || targetHeight <= 0) {
+    bitmap.close();
+    return {
+      id,
+      success: false,
+      type: 'error',
+      error: 'The selected dimensions are too large to process in your browser.',
+      errorCode: 'BROWSER_MEMORY_ERROR',
+    };
+  }
+
   if (width > 8192 || height > 8192) {
     bitmap.close();
     return {
@@ -496,7 +528,7 @@ export async function processImageJob(
 
   try {
     if (typeof OffscreenCanvas !== 'undefined') {
-      const canvas = new OffscreenCanvas(width, height);
+      const canvas = new OffscreenCanvas(targetWidth, targetHeight);
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         bitmap.close();
@@ -504,7 +536,9 @@ export async function processImageJob(
           id,
           success: false,
           type: 'error',
-          error: isCompress
+          error: isResize
+            ? "We couldn't resize this image. Please try again."
+            : isCompress
             ? "We couldn't compress this image. Please try again."
             : "We couldn't convert this image. Please try again.",
           errorCode: 'PROCESSING_FAILED',
@@ -512,13 +546,13 @@ export async function processImageJob(
       }
 
       // If converting to JPG (from transparent format), fill solid background first
-      if (!isCompress && isTargetJpg) {
+      if (isTargetJpg) {
         ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
       }
 
       // Draw decoded image on top
-      ctx.drawImage(bitmap, 0, 0);
+      ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
       bitmap.close(); // Immediate memory cleanup
 
       if (isTargetJpg || isTargetWebp) {
@@ -561,8 +595,8 @@ export async function processImageJob(
       }
     } else if (typeof document !== 'undefined') {
       const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
         bitmap.close();
@@ -570,7 +604,9 @@ export async function processImageJob(
           id,
           success: false,
           type: 'error',
-          error: isCompress
+          error: isResize
+            ? "We couldn't resize this image. Please try again."
+            : isCompress
             ? "We couldn't compress this image. Please try again."
             : "We couldn't convert this image. Please try again.",
           errorCode: 'PROCESSING_FAILED',
@@ -578,13 +614,13 @@ export async function processImageJob(
       }
 
       // If converting to JPG (from transparent format), fill solid background first
-      if (!isCompress && isTargetJpg) {
+      if (isTargetJpg) {
         ctx.fillStyle = backgroundColor;
-        ctx.fillRect(0, 0, width, height);
+        ctx.fillRect(0, 0, targetWidth, targetHeight);
       }
 
       // Draw decoded image on top
-      ctx.drawImage(bitmap, 0, 0);
+      ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
       bitmap.close(); // Immediate memory cleanup
 
       encodedBlob = await new Promise<Blob>((resolve, reject) => {
@@ -648,7 +684,9 @@ export async function processImageJob(
         id,
         success: false,
         type: 'error',
-        error: isCompress
+        error: isResize
+          ? 'This image is too large to resize in your browser.'
+          : isCompress
           ? 'This image is too large to compress in your browser.'
           : 'This image is too large for your browser to process.',
         errorCode: 'BROWSER_MEMORY_ERROR',
@@ -658,7 +696,9 @@ export async function processImageJob(
       id,
       success: false,
       type: 'error',
-      error: isCompress
+      error: isResize
+        ? "We couldn't resize this image. Please try again."
+        : isCompress
         ? "We couldn't compress this image. Please try again."
         : "We couldn't convert this image. Please try again.",
       errorCode: 'PROCESSING_FAILED',
@@ -678,6 +718,12 @@ export async function processImageJob(
 
   const outputFileName = isCompress
     ? fileName
+    : isResize
+    ? (isTargetJpg
+        ? toJpgFilename(fileName)
+        : isTargetWebp
+        ? toWebpFilename(fileName)
+        : toPngFilename(fileName))
     : isTargetWebp
     ? toWebpFilename(fileName)
     : isTargetJpg
@@ -691,8 +737,8 @@ export async function processImageJob(
     resultData,
     resultMime: targetMime,
     fileName: outputFileName,
-    width,
-    height,
+    width: targetWidth,
+    height: targetHeight,
     originalSize,
     convertedSize: resultData.byteLength,
   };
