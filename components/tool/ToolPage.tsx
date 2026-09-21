@@ -14,6 +14,12 @@ import JpgToPngController from './JpgToPngController';
 import PngToJpgController from './PngToJpgController';
 import JpgToWebpController from './JpgToWebpController';
 import WebpToJpgController from './WebpToJpgController';
+import PngToWebpController from './PngToWebpController';
+import WebpToPngController from './WebpToPngController';
+import HeicToJpgController from './HeicToJpgController';
+import SvgToPngController from './SvgToPngController';
+import { GifToPngController } from './GifToPngController';
+import { BmpToPngController } from './BmpToPngController';
 import { ShieldCheck, Zap, Lock, Cpu, Sparkles } from 'lucide-react';
 import JsonLd from '@/components/seo/JsonLd';
 import { createWebApplicationSchema, createBreadcrumbSchema, siteConfig } from '@/lib/seo';
@@ -88,6 +94,18 @@ export function ToolPage({ tool }: ToolPageProps) {
             <JpgToWebpController />
           ) : tool.slug === 'webp-to-jpg' ? (
             <WebpToJpgController />
+          ) : tool.slug === 'png-to-webp' ? (
+            <PngToWebpController />
+          ) : tool.slug === 'webp-to-png' ? (
+            <WebpToPngController />
+          ) : tool.slug === 'heic-to-jpg' ? (
+            <HeicToJpgController />
+          ) : tool.slug === 'svg-to-png' ? (
+            <SvgToPngController />
+          ) : tool.slug === 'gif-to-png' ? (
+            <GifToPngController />
+          ) : tool.slug === 'bmp-to-png' ? (
+            <BmpToPngController />
           ) : (
             <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-card p-6 md:p-8 shadow-subtle mb-6">
               <div className="max-w-2xl mx-auto space-y-6">

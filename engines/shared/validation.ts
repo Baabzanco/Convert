@@ -124,14 +124,83 @@ export function hasWebpMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
 }
 
 /**
+ * Checks if a byte buffer starts with the BMP 'BM' signature (0x42, 0x4D).
+ */
+export function hasBmpMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  if (bytes.length < 2) return false;
+  return bytes[0] === 0x42 && bytes[1] === 0x4D;
+}
+
+/**
+ * Checks if a byte buffer starts with the GIF87a or GIF89a signature.
+ * GIF87a: 47 49 46 38 37 61
+ * GIF89a: 47 49 46 38 39 61
+ */
+export function hasGifMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  if (bytes.length < 6) return false;
+
+  return (
+    bytes[0] === 0x47 && // 'G'
+    bytes[1] === 0x49 && // 'I'
+    bytes[2] === 0x46 && // 'F'
+    bytes[3] === 0x38 && // '8'
+    (bytes[4] === 0x37 || bytes[4] === 0x39) && // '7' or '9'
+    bytes[5] === 0x61 // 'a'
+  );
+}
+
+/**
+ * Checks if a byte buffer matches ISO Base Media File Format containing HEIC/HEIF brands.
+ * Bytes 4-7 are 'ftyp', followed by major brand or compatible brands matching HEIC/HEIF specifications.
+ */
+export function hasHeicMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  if (bytes.length < 12) return false;
+
+  // Offset 4..7 must be 'ftyp'
+  if (
+    bytes[4] !== 0x66 || // 'f'
+    bytes[5] !== 0x74 || // 't'
+    bytes[6] !== 0x79 || // 'y'
+    bytes[7] !== 0x70    // 'p'
+  ) {
+    return false;
+  }
+
+  const decoder = new TextDecoder('utf-8');
+  const validBrands = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1', 'msf1']);
+
+  // Major brand check (offset 8..12)
+  const majorBrand = decoder.decode(bytes.subarray(8, 12)).toLowerCase().trim();
+  if (validBrands.has(majorBrand)) {
+    return true;
+  }
+
+  // Compatible brands check (starting at offset 16)
+  const boxLength = (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3];
+  const maxOffset = Math.min(bytes.length, boxLength > 0 ? boxLength : bytes.length, 128);
+
+  for (let offset = 16; offset + 4 <= maxOffset; offset += 4) {
+    const brand = decoder.decode(bytes.subarray(offset, offset + 4)).toLowerCase().trim();
+    if (validBrands.has(brand)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Validates magic-byte signature from the first bytes of a file.
  */
 export async function validateMagicBytes(
   file: File | Blob,
-  expectedType: 'jpeg' | 'png' | 'pdf' | 'webp' = 'jpeg'
+  expectedType: 'jpeg' | 'png' | 'pdf' | 'webp' | 'heic' | 'gif' | 'bmp' = 'jpeg'
 ): Promise<ValidationResult> {
   try {
-    const slice = file.slice(0, 16);
+    const slice = file.slice(0, 128);
     const buffer = await slice.arrayBuffer();
     const bytes = new Uint8Array(buffer);
 
@@ -158,6 +227,30 @@ export async function validateMagicBytes(
           error: new ToolError('INVALID_FILE', 'This file is not a valid WebP image.'),
         };
       }
+    } else if (expectedType === 'heic') {
+      // HEIC container signature: ftyp box with heic/heif brand
+      if (!hasHeicMagicBytes(bytes)) {
+        return {
+          valid: false,
+          error: new ToolError('INVALID_FILE', 'This file is not a valid HEIC image.'),
+        };
+      }
+    } else if (expectedType === 'gif') {
+      // GIF magic bytes: GIF87a or GIF89a
+      if (!hasGifMagicBytes(bytes)) {
+        return {
+          valid: false,
+          error: new ToolError('INVALID_FILE', 'This file is not a valid GIF image.'),
+        };
+      }
+    } else if (expectedType === 'bmp') {
+      // BMP magic bytes: BM (0x42 0x4D)
+      if (!hasBmpMagicBytes(bytes)) {
+        return {
+          valid: false,
+          error: new ToolError('INVALID_FILE', 'This file is not a valid BMP image.'),
+        };
+      }
     } else if (expectedType === 'pdf') {
       // PDF magic bytes: %PDF (25 50 44 46)
       const isPdf =
@@ -181,6 +274,10 @@ export async function validateMagicBytes(
         ? 'This file is not a valid PNG image.'
         : expectedType === 'webp'
         ? 'This file is not a valid WebP image.'
+        : expectedType === 'heic'
+        ? 'This file is not a valid HEIC image.'
+        : expectedType === 'gif'
+        ? 'This file is not a valid GIF image.'
         : expectedType === 'pdf'
         ? 'This file is not a valid PDF document.'
         : 'This file is not a valid JPEG image.';
@@ -311,6 +408,78 @@ export async function validateWebpFile(file: File): Promise<ValidationResult> {
 
   return { valid: true };
 }
+
+/**
+ * Complete validation pipeline for HEIC files:
+ * File -> Size -> Extension -> MIME -> Container / ftyp validation -> Ready
+ */
+export async function validateHeicFile(file: File): Promise<ValidationResult> {
+  // 1. Size validation
+  if (file.size > VALIDATION_LIMITS.MAX_IMAGE_SIZE_BYTES) {
+    return {
+      valid: false,
+      error: new ToolError('FILE_TOO_LARGE', 'This file is too large. Maximum size is 50 MB.'),
+    };
+  }
+
+  // 2. Extension validation
+  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+  if (ext !== 'heic') {
+    return {
+      valid: false,
+      error: new ToolError('UNSUPPORTED_FORMAT', 'Only HEIC files are supported.'),
+    };
+  }
+
+  // 3. MIME validation (reject explicit known conflicting types like image/png, application/pdf, etc.)
+  const conflictingMimes = [
+    'image/png',
+    'application/pdf',
+    'image/jpeg',
+    'image/webp',
+    'image/gif',
+    'image/bmp',
+    'image/svg+xml',
+    'text/plain',
+    'application/zip',
+  ];
+  if (file.type && conflictingMimes.includes(file.type.toLowerCase())) {
+    return {
+      valid: false,
+      error: new ToolError('INVALID_FILE', 'This file is not a valid HEIC image.'),
+    };
+  }
+
+  // 4. Container / ftyp validation with HEIC/HEIF brands
+  const magicCheck = await validateMagicBytes(file, 'heic');
+  if (!magicCheck.valid) {
+    return magicCheck;
+  }
+
+  return { valid: true };
+}
+
+export {
+  validateSvgFile,
+  validateSvgContent,
+  parseViewBox,
+  parseLengthToPixels,
+  scanSvgSecurity,
+} from '../image/svg/svg-validator';
+
+export {
+  validateGifFile,
+  parseGifDimensions,
+  isAnimatedGif,
+  GIF_LIMITS,
+} from '../image/gif/gif-validator';
+
+export {
+  validateBmpFile,
+  validateBmpBuffer,
+  parseBmpDimensions,
+  BMP_LIMITS,
+} from '../image/bmp/bmp-validator';
 
 export function validateFile(file: File, rules: ValidationRule): ValidationResult {
   const isPdf = rules.allowedExtensions?.some((ext) => ext.toLowerCase().includes('pdf')) || false;

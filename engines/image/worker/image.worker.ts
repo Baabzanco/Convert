@@ -42,6 +42,28 @@ function isWebp(bytes: Uint8Array): boolean {
 }
 
 /**
+ * Checks if buffer starts with GIF87a or GIF89a
+ */
+function isGif(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 6 &&
+    bytes[0] === 0x47 && // 'G'
+    bytes[1] === 0x49 && // 'I'
+    bytes[2] === 0x46 && // 'F'
+    bytes[3] === 0x38 && // '8'
+    (bytes[4] === 0x37 || bytes[4] === 0x39) && // '7' or '9'
+    bytes[5] === 0x61 // 'a'
+  );
+}
+
+/**
+ * Checks if buffer starts with BMP signature: BM (0x42 0x4D)
+ */
+function isBmp(bytes: Uint8Array): boolean {
+  return bytes.length >= 2 && bytes[0] === 0x42 && bytes[1] === 0x4d;
+}
+
+/**
  * Replaces extension with .png
  */
 function toPngFilename(name: string): string {
@@ -94,24 +116,106 @@ export async function processImageJob(
   const isTargetJpg = options.targetFormat === 'jpg';
   const isTargetWebp = options.targetFormat === 'webp';
 
+  const isSourceBmp =
+    options.sourceFormat === 'bmp' ||
+    fileName.toLowerCase().endsWith('.bmp') ||
+    request.mimeType === 'image/bmp';
+  const isSourceGif =
+    !isSourceBmp &&
+    (options.sourceFormat === 'gif' ||
+      fileName.toLowerCase().endsWith('.gif') ||
+      request.mimeType === 'image/gif');
   const isSourceWebp =
-    options.sourceFormat === 'webp' ||
-    fileName.toLowerCase().endsWith('.webp') ||
-    request.mimeType === 'image/webp';
+    !isSourceBmp &&
+    !isSourceGif &&
+    (options.sourceFormat === 'webp' ||
+      fileName.toLowerCase().endsWith('.webp') ||
+      request.mimeType === 'image/webp');
   const isSourcePng =
-    options.sourceFormat === 'png' ||
-    (!isSourceWebp && (fileName.toLowerCase().endsWith('.png') || request.mimeType === 'image/png' || (isTargetJpg && !isSourceWebp)));
-  const isSourceJpg =
-    options.sourceFormat === 'jpg' ||
-    (!isSourceWebp && !isSourcePng);
+    !isSourceBmp &&
+    !isSourceGif &&
+    !isSourceWebp &&
+    (options.sourceFormat === 'png' ||
+      (!isSourceWebp &&
+        (fileName.toLowerCase().endsWith('.png') ||
+          request.mimeType === 'image/png' ||
+          (isTargetJpg && !isSourceWebp))));
+  const isSourceJpg = !isSourceBmp && !isSourceGif && !isSourceWebp && !isSourcePng;
 
-  const expectedInputDesc = isSourceWebp ? 'WebP' : isSourcePng ? 'PNG' : 'JPEG';
+  const expectedInputDesc = isSourceBmp
+    ? 'BMP'
+    : isSourceGif
+    ? 'GIF'
+    : isSourceWebp
+    ? 'WebP'
+    : isSourcePng
+    ? 'PNG'
+    : 'JPEG';
 
   // 1. Validating Stage (0 - 20%)
   postProgress?.('validating', 15);
   const bytes = new Uint8Array(fileData);
 
-  if (isSourceWebp) {
+  if (isSourceBmp) {
+    if (!isBmp(bytes)) {
+      return {
+        id,
+        success: false,
+        type: 'error',
+        error: 'This file is not a valid BMP image.',
+        errorCode: 'INVALID_FILE',
+      };
+    }
+    if (bytes.length >= 26) {
+      try {
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const dibSize = view.getUint32(14, true);
+        let bWidth = 0;
+        let bHeight = 0;
+        if (dibSize === 12 && bytes.length >= 26) {
+          bWidth = view.getUint16(18, true);
+          bHeight = view.getUint16(20, true);
+        } else if (dibSize >= 40 && bytes.length >= 26) {
+          bWidth = Math.abs(view.getInt32(18, true));
+          bHeight = Math.abs(view.getInt32(22, true));
+        }
+        if (bWidth > 8192 || bHeight > 8192) {
+          return {
+            id,
+            success: false,
+            type: 'error',
+            error: 'This BMP is too large to process in your browser.',
+            errorCode: 'BROWSER_MEMORY_ERROR',
+          };
+        }
+      } catch {
+        // Fall through
+      }
+    }
+  } else if (isSourceGif) {
+    if (!isGif(bytes)) {
+      return {
+        id,
+        success: false,
+        type: 'error',
+        error: 'This file is not a valid GIF image.',
+        errorCode: 'INVALID_FILE',
+      };
+    }
+    if (bytes.length >= 10) {
+      const gWidth = bytes[6] | (bytes[7] << 8);
+      const gHeight = bytes[8] | (bytes[9] << 8);
+      if (gWidth > 8192 || gHeight > 8192) {
+        return {
+          id,
+          success: false,
+          type: 'error',
+          error: 'This GIF is too large to process in your browser.',
+          errorCode: 'BROWSER_MEMORY_ERROR',
+        };
+      }
+    }
+  } else if (isSourceWebp) {
     if (!isWebp(bytes)) {
       return {
         id,
@@ -146,27 +250,82 @@ export async function processImageJob(
   // 2. Reading Stage (20 - 45%)
   postProgress?.('reading', 35);
   const originalSize = fileData.byteLength;
-  const inputMime = isSourceWebp ? 'image/webp' : isSourcePng ? 'image/png' : 'image/jpeg';
+  const inputMime = isSourceBmp
+    ? 'image/bmp'
+    : isSourceGif
+    ? 'image/gif'
+    : isSourceWebp
+    ? 'image/webp'
+    : isSourcePng
+    ? 'image/png'
+    : 'image/jpeg';
   const blob = new Blob([fileData], { type: inputMime });
 
   // 3. Decoding Stage (45 - 70%)
   postProgress?.('decoding', 60);
-  let bitmap: ImageBitmap;
+  let bitmap: ImageBitmap | null = null;
   try {
-    if (typeof createImageBitmap === 'function') {
-      if (isSourceJpg) {
-        try {
-          // Automatically handle EXIF orientation to preserve correct photograph orientation
-          bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
-        } catch {
-          // Fallback if imageOrientation option is not supported
+    let decodedWithImageDecoder = false;
+    if (isSourceGif && typeof ImageDecoder !== 'undefined') {
+      let decoder: ImageDecoder | null = null;
+      let videoFrame: VideoFrame | null = null;
+      try {
+        decoder = new ImageDecoder({ data: fileData, type: 'image/gif' });
+        const decoded = await decoder.decode({ frameIndex: 0 });
+        videoFrame = decoded.image;
+        const vWidth = videoFrame.displayWidth || videoFrame.codedWidth;
+        const vHeight = videoFrame.displayHeight || videoFrame.codedHeight;
+        if (vWidth > 8192 || vHeight > 8192) {
+          videoFrame.close();
+          decoder.close();
+          return {
+            id,
+            success: false,
+            type: 'error',
+            error: 'This GIF is too large to process in your browser.',
+            errorCode: 'BROWSER_MEMORY_ERROR',
+          };
+        }
+        if (typeof createImageBitmap === 'function') {
+          bitmap = await createImageBitmap(videoFrame);
+          decodedWithImageDecoder = true;
+        }
+      } catch {
+        // Fallback to createImageBitmap(blob)
+      } finally {
+        if (videoFrame) {
+          try {
+            videoFrame.close();
+          } catch {
+            // Ignored close error
+          }
+        }
+        if (decoder) {
+          try {
+            decoder.close();
+          } catch {
+            // Ignored close error
+          }
+        }
+      }
+    }
+
+    if (!decodedWithImageDecoder) {
+      if (typeof createImageBitmap === 'function') {
+        if (isSourceJpg) {
+          try {
+            // Automatically handle EXIF orientation to preserve correct photograph orientation
+            bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+          } catch {
+            // Fallback if imageOrientation option is not supported
+            bitmap = await createImageBitmap(blob);
+          }
+        } else {
           bitmap = await createImageBitmap(blob);
         }
       } else {
-        bitmap = await createImageBitmap(blob);
+        throw new Error('createImageBitmap not supported in this context');
       }
-    } else {
-      throw new Error('createImageBitmap not supported in this context');
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message.toLowerCase() : '';
@@ -179,6 +338,16 @@ export async function processImageJob(
         errorCode: 'BROWSER_MEMORY_ERROR',
       };
     }
+    return {
+      id,
+      success: false,
+      type: 'error',
+      error: `This file is not a valid ${expectedInputDesc} image.`,
+      errorCode: 'INVALID_FILE',
+    };
+  }
+
+  if (!bitmap) {
     return {
       id,
       success: false,
@@ -264,6 +433,17 @@ export async function processImageJob(
           errorCode: 'UNSUPPORTED_FORMAT',
         };
       }
+
+      // Validate PNG output to reject accidental JPEG or WebP fallback
+      if (!isTargetJpg && !isTargetWebp && (encodedBlob.type !== 'image/png' || encodedBlob.size <= 0)) {
+        return {
+          id,
+          success: false,
+          type: 'error',
+          error: 'Your browser could not create a PNG image. Please try another browser.',
+          errorCode: 'UNSUPPORTED_FORMAT',
+        };
+      }
     } else if (typeof document !== 'undefined') {
       const canvas = document.createElement('canvas');
       canvas.width = width;
@@ -319,6 +499,17 @@ export async function processImageJob(
           success: false,
           type: 'error',
           error: 'Your browser could not create a JPG image. Please try another browser.',
+          errorCode: 'UNSUPPORTED_FORMAT',
+        };
+      }
+
+      // Validate PNG output to reject accidental JPEG or WebP fallback
+      if (!isTargetJpg && !isTargetWebp && (encodedBlob.type !== 'image/png' || encodedBlob.size <= 0)) {
+        return {
+          id,
+          success: false,
+          type: 'error',
+          error: 'Your browser could not create a PNG image. Please try another browser.',
           errorCode: 'UNSUPPORTED_FORMAT',
         };
       }

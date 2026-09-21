@@ -1,11 +1,22 @@
 import { ToolError } from '../shared/errors';
-import { validateJpegFile, validatePngFile, validateWebpFile } from '../shared/validation';
+import {
+  validateJpegFile,
+  validatePngFile,
+  validateWebpFile,
+  validateHeicFile,
+  validateGifFile,
+  validateBmpFile,
+  validateMagicBytes,
+} from '../shared/validation';
+import { rasterizeSvgToPng } from './svg/svg-rasterizer';
+import { decodeGifFirstFrameToPng } from './gif/gif-decoder';
+import { decodeBmpToPng } from './bmp/bmp-decoder';
 import { imageWorkerClient } from './worker/worker-client';
 import type { ImageWorkerRequest, WorkerProgressStage } from './worker/worker-types';
 
 export interface ImageConvertOptions {
   targetFormat: 'png' | 'jpg' | 'webp';
-  sourceFormat?: 'png' | 'jpg' | 'webp';
+  sourceFormat?: 'png' | 'jpg' | 'webp' | 'heic' | 'gif' | 'bmp';
   quality?: number; // 0.1 to 1.0
   backgroundColor?: string;
 }
@@ -22,6 +33,14 @@ export interface JpgToWebpOptions {
 export interface WebpToJpgOptions {
   quality?: number; // 0.7, 0.8, 0.9 (default: 0.9)
   backgroundColor?: string; // '#FFFFFF' (default) or '#000000'
+}
+
+export interface PngToWebpOptions {
+  quality?: number; // 0.7, 0.8, 0.9 (default: 0.9)
+}
+
+export interface HeicToJpgOptions {
+  quality?: number; // 0.7, 0.8, 0.9 (default: 0.9)
 }
 
 export interface ImageProcessingResult {
@@ -107,6 +126,155 @@ export async function convertWebpToJpg(
 }
 
 /**
+ * Converts a PNG file into a WebP entirely client-side in the browser.
+ * Preserves transparency (alpha channel), original dimensions, and handles adjustable quality.
+ */
+export async function convertPngToWebp(
+  file: File,
+  options: PngToWebpOptions = {},
+  onProgress?: (progress: number, stage?: WorkerProgressStage) => void
+): Promise<ImageProcessingResult> {
+  return convertImage(
+    file,
+    {
+      sourceFormat: 'png',
+      targetFormat: 'webp',
+      quality: options.quality ?? 0.9,
+    },
+    onProgress
+  );
+}
+
+/**
+ * Converts a WebP file into a PNG entirely client-side in the browser.
+ * Preserves full alpha channel transparency and original image dimensions.
+ */
+export async function convertWebpToPng(
+  file: File,
+  onProgress?: (progress: number, stage?: WorkerProgressStage) => void
+): Promise<ImageProcessingResult> {
+  return convertImage(
+    file,
+    {
+      sourceFormat: 'webp',
+      targetFormat: 'png',
+    },
+    onProgress
+  );
+}
+
+/**
+ * Converts a HEIC file into a JPG entirely client-side in the browser using libheif/WASM.
+ * Preserves original dimensions, normalizes errors, and validates JPEG output integrity.
+ */
+export async function convertHeicToJpg(
+  file: File,
+  options: HeicToJpgOptions = {},
+  onProgress?: (progress: number, stage?: WorkerProgressStage) => void
+): Promise<ImageProcessingResult> {
+  // 1. Initial Validation Pipeline (Size -> Ext -> MIME -> ftyp brand)
+  onProgress?.(10, 'validating');
+  const validation = await validateHeicFile(file);
+  if (!validation.valid && validation.error) {
+    throw validation.error;
+  }
+
+  // 2. Reading Stage
+  onProgress?.(25, 'reading');
+
+  // 3. Decoding Stage (Lazy loading HEIC decoder)
+  onProgress?.(45, 'decoding');
+  const { defaultHeicDecoder } = await import('./heic');
+
+  // 4. Encoding Stage
+  onProgress?.(75, 'encoding');
+  const quality = options.quality ?? 0.9;
+  const jpegBlob = await defaultHeicDecoder.decodeToJpegBlob(file, quality);
+
+  // 5. Finalizing Stage
+  onProgress?.(95, 'finalizing');
+
+  // Explicit verification of JPEG output
+  if (!jpegBlob || jpegBlob.type !== 'image/jpeg' || jpegBlob.size <= 0) {
+    throw new ToolError(
+      'UNSUPPORTED_FORMAT',
+      'Your browser could not create a JPG image. Please try another browser.'
+    );
+  }
+
+  const magicCheck = await validateMagicBytes(jpegBlob, 'jpeg');
+  if (!magicCheck.valid) {
+    throw new ToolError(
+      'PROCESSING_FAILED',
+      "We couldn't convert this HEIC image. Please try again."
+    );
+  }
+
+  // Output filename
+  const lastDot = file.name.lastIndexOf('.');
+  const stem = lastDot === -1 ? file.name : file.name.substring(0, lastDot);
+  const outFileName = `${stem}.jpg`;
+
+  // Get image dimensions
+  let width = 0;
+  let height = 0;
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bmp = await createImageBitmap(jpegBlob);
+      width = bmp.width;
+      height = bmp.height;
+      bmp.close();
+    } catch {
+      // Ignored
+    }
+  }
+
+  onProgress?.(100, 'finalizing');
+
+  return {
+    blob: jpegBlob,
+    fileName: outFileName,
+    width,
+    height,
+    originalSize: file.size,
+    convertedSize: jpegBlob.size,
+  };
+}
+
+/**
+ * Converts an SVG file into a PNG entirely client-side in the browser.
+ * Validates XML safety, dimensions/viewBox, renders via canvas, and verifies output PNG signature.
+ */
+export async function convertSvgToPng(
+  file: File,
+  onProgress?: (progress: number, stage?: WorkerProgressStage) => void
+): Promise<ImageProcessingResult> {
+  return rasterizeSvgToPng(file, file.name, onProgress);
+}
+
+/**
+ * Converts a GIF file (first frame) into a PNG entirely client-side in the browser.
+ * Extracts frame 0 deterministically, preserves alpha transparency, and verifies output PNG signature.
+ */
+export async function convertGifToPng(
+  file: File,
+  onProgress?: (progress: number, stage?: WorkerProgressStage) => void
+): Promise<ImageProcessingResult> {
+  return decodeGifFirstFrameToPng(file, file.name, onProgress);
+}
+
+/**
+ * Converts a BMP file into a PNG entirely client-side in the browser.
+ * Uses browser-native decoding, preserves dimensions, handles top-down/bottom-up BMPs, and verifies output PNG signature.
+ */
+export async function convertBmpToPng(
+  file: File,
+  onProgress?: (progress: number, stage?: WorkerProgressStage) => void
+): Promise<ImageProcessingResult> {
+  return decodeBmpToPng(file, file.name, onProgress);
+}
+
+/**
  * Image conversion engine coordinating validation, workers, and encoding.
  */
 export async function convertImage(
@@ -115,25 +283,58 @@ export async function convertImage(
   onProgress?: (progress: number, stage?: WorkerProgressStage) => void
 ): Promise<ImageProcessingResult> {
   // 1. Initial Validation Pipeline (Size -> Ext -> MIME -> Magic Bytes)
+  const isBmpSource =
+    options.sourceFormat === 'bmp' ||
+    file.name.toLowerCase().endsWith('.bmp') ||
+    file.type === 'image/bmp';
+  const isGifSource =
+    !isBmpSource &&
+    (options.sourceFormat === 'gif' ||
+      file.name.toLowerCase().endsWith('.gif') ||
+      file.type === 'image/gif');
   const isWebpSource =
-    options.sourceFormat === 'webp' ||
-    (options.targetFormat === 'jpg' && file.name.toLowerCase().endsWith('.webp'));
+    !isBmpSource &&
+    !isGifSource &&
+    (options.sourceFormat === 'webp' ||
+      file.name.toLowerCase().endsWith('.webp') ||
+      file.type === 'image/webp');
+  const isPngSource =
+    !isBmpSource &&
+    !isGifSource &&
+    !isWebpSource &&
+    (options.sourceFormat === 'png' ||
+      (!isWebpSource &&
+        (file.name.toLowerCase().endsWith('.png') ||
+          file.type === 'image/png' ||
+          options.targetFormat === 'jpg')));
 
-  if (isWebpSource) {
+  if (isBmpSource) {
+    onProgress?.(10, 'validating');
+    const validation = await validateBmpFile(file);
+    if (!validation.valid && validation.error) {
+      throw validation.error;
+    }
+  } else if (isGifSource) {
+    onProgress?.(10, 'validating');
+    const validation = await validateGifFile(file);
+    if (!validation.valid && validation.error) {
+      throw validation.error;
+    }
+  } else if (isWebpSource) {
     onProgress?.(10, 'validating');
     const validation = await validateWebpFile(file);
     if (!validation.valid && validation.error) {
       throw validation.error;
     }
-  } else if (options.targetFormat === 'png' || options.targetFormat === 'webp') {
+  } else if (isPngSource) {
     onProgress?.(10, 'validating');
-    const validation = await validateJpegFile(file);
+    const validation = await validatePngFile(file);
     if (!validation.valid && validation.error) {
       throw validation.error;
     }
-  } else if (options.targetFormat === 'jpg') {
+  } else {
     onProgress?.(10, 'validating');
-    const validation = await validatePngFile(file);
+    const validation = await validateJpegFile(file);
     if (!validation.valid && validation.error) {
       throw validation.error;
     }
@@ -148,9 +349,13 @@ export async function convertImage(
       ? crypto.randomUUID()
       : `task_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-  const defaultInputMime = isWebpSource
+  const defaultInputMime = isBmpSource
+    ? 'image/bmp'
+    : isGifSource
+    ? 'image/gif'
+    : isWebpSource
     ? 'image/webp'
-    : options.targetFormat === 'jpg'
+    : isPngSource
     ? 'image/png'
     : 'image/jpeg';
 
@@ -162,7 +367,9 @@ export async function convertImage(
     mimeType: file.type || defaultInputMime,
     options: {
       targetFormat: options.targetFormat,
-      sourceFormat: options.sourceFormat || (isWebpSource ? 'webp' : undefined),
+      sourceFormat:
+        options.sourceFormat ||
+        (isBmpSource ? 'bmp' : isGifSource ? 'gif' : isWebpSource ? 'webp' : isPngSource ? 'png' : 'jpg'),
       quality: options.quality,
       backgroundColor: options.backgroundColor,
     },
@@ -209,12 +416,23 @@ export async function convertImage(
     );
   }
 
+  // Explicit verification for PNG output to prevent accidental JPEG or WebP fallback
+  if (
+    options.targetFormat === 'png' &&
+    (response.resultMime !== 'image/png' || resultBlob.type !== 'image/png' || resultBlob.size <= 0)
+  ) {
+    throw new ToolError(
+      'UNSUPPORTED_FORMAT',
+      'Your browser could not create a PNG image. Please try another browser.'
+    );
+  }
+
   const fallbackFileName =
     options.targetFormat === 'webp'
-      ? file.name.replace(/\.(jpe?g)$/i, '.webp')
+      ? file.name.replace(/\.(jpe?g|png)$/i, '.webp')
       : options.targetFormat === 'jpg'
       ? file.name.replace(/\.(webp|png)$/i, '.jpg')
-      : file.name.replace(/\.(jpe?g)$/i, '.png');
+      : file.name.replace(/\.(jpe?g|webp)$/i, '.png');
 
   return {
     blob: resultBlob,
