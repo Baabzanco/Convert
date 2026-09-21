@@ -64,6 +64,50 @@ function isBmp(bytes: Uint8Array): boolean {
 }
 
 /**
+ * Checks if buffer is an animated WebP file (VP8X animation flag or ANIM/ANMF chunks)
+ */
+function isAnimatedWebp(bytes: Uint8Array): boolean {
+  if (bytes.length < 20) return false;
+  if (!isWebp(bytes)) return false;
+
+  if (
+    bytes[12] === 0x56 && // 'V'
+    bytes[13] === 0x50 && // 'P'
+    bytes[14] === 0x38 && // '8'
+    bytes[15] === 0x58    // 'X'
+  ) {
+    if (bytes.length >= 21) {
+      const flags = bytes[20];
+      if ((flags & 0x02) !== 0) {
+        return true;
+      }
+    }
+  }
+
+  const maxScan = Math.min(bytes.length - 4, 4096);
+  for (let i = 12; i < maxScan; i++) {
+    if (
+      bytes[i] === 0x41 && // 'A'
+      bytes[i + 1] === 0x4e && // 'N'
+      bytes[i + 2] === 0x49 && // 'I'
+      bytes[i + 3] === 0x4d    // 'M'
+    ) {
+      return true;
+    }
+    if (
+      bytes[i] === 0x41 && // 'A'
+      bytes[i + 1] === 0x4e && // 'N'
+      bytes[i + 2] === 0x4d && // 'M'
+      bytes[i + 3] === 0x46    // 'F'
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Replaces extension with .png
  */
 function toPngFilename(name: string): string {
@@ -100,47 +144,85 @@ export async function processImageJob(
 ): Promise<ImageWorkerResponse> {
   const { id, fileData, fileName, operation, options } = request;
 
+  const isCompress = operation === 'compress';
+
   if (
-    operation !== 'convert' ||
-    (options.targetFormat !== 'png' && options.targetFormat !== 'jpg' && options.targetFormat !== 'webp')
+    (!isCompress && operation !== 'convert') ||
+    (!isCompress && options.targetFormat !== 'png' && options.targetFormat !== 'jpg' && options.targetFormat !== 'webp')
   ) {
     return {
       id,
       success: false,
       type: 'error',
-      error: 'Unsupported conversion format.',
+      error: 'Unsupported image operation.',
       errorCode: 'UNSUPPORTED_FORMAT',
     };
   }
 
-  const isTargetJpg = options.targetFormat === 'jpg';
-  const isTargetWebp = options.targetFormat === 'webp';
+  let isTargetJpg = false;
+  let isTargetWebp = false;
+  let isSourceBmp = false;
+  let isSourceGif = false;
+  let isSourceWebp = false;
+  let isSourcePng = false;
+  let isSourceJpg = false;
 
-  const isSourceBmp =
-    options.sourceFormat === 'bmp' ||
-    fileName.toLowerCase().endsWith('.bmp') ||
-    request.mimeType === 'image/bmp';
-  const isSourceGif =
-    !isSourceBmp &&
-    (options.sourceFormat === 'gif' ||
-      fileName.toLowerCase().endsWith('.gif') ||
-      request.mimeType === 'image/gif');
-  const isSourceWebp =
-    !isSourceBmp &&
-    !isSourceGif &&
-    (options.sourceFormat === 'webp' ||
-      fileName.toLowerCase().endsWith('.webp') ||
-      request.mimeType === 'image/webp');
-  const isSourcePng =
-    !isSourceBmp &&
-    !isSourceGif &&
-    !isSourceWebp &&
-    (options.sourceFormat === 'png' ||
-      (!isSourceWebp &&
-        (fileName.toLowerCase().endsWith('.png') ||
-          request.mimeType === 'image/png' ||
-          (isTargetJpg && !isSourceWebp))));
-  const isSourceJpg = !isSourceBmp && !isSourceGif && !isSourceWebp && !isSourcePng;
+  if (isCompress) {
+    const ext = fileName.split('.').pop()?.toLowerCase() || '';
+    const mime = (request.mimeType || '').toLowerCase();
+    const optSrc = options.sourceFormat;
+
+    if (optSrc === 'png' || (!optSrc && (ext === 'png' || mime === 'image/png'))) {
+      isSourcePng = true;
+    } else if (optSrc === 'webp' || (!optSrc && (ext === 'webp' || mime === 'image/webp'))) {
+      isSourceWebp = true;
+      isTargetWebp = true;
+    } else if (
+      optSrc === 'jpg' ||
+      optSrc === 'jpeg' ||
+      (!optSrc && (ext === 'jpg' || ext === 'jpeg' || mime === 'image/jpeg'))
+    ) {
+      isSourceJpg = true;
+      isTargetJpg = true;
+    } else {
+      return {
+        id,
+        success: false,
+        type: 'error',
+        error: 'Only JPG, JPEG, PNG, and WebP files are supported for compression.',
+        errorCode: 'UNSUPPORTED_FORMAT',
+      };
+    }
+  } else {
+    isTargetJpg = options.targetFormat === 'jpg';
+    isTargetWebp = options.targetFormat === 'webp';
+
+    isSourceBmp =
+      options.sourceFormat === 'bmp' ||
+      fileName.toLowerCase().endsWith('.bmp') ||
+      request.mimeType === 'image/bmp';
+    isSourceGif =
+      !isSourceBmp &&
+      (options.sourceFormat === 'gif' ||
+        fileName.toLowerCase().endsWith('.gif') ||
+        request.mimeType === 'image/gif');
+    isSourceWebp =
+      !isSourceBmp &&
+      !isSourceGif &&
+      (options.sourceFormat === 'webp' ||
+        fileName.toLowerCase().endsWith('.webp') ||
+        request.mimeType === 'image/webp');
+    isSourcePng =
+      !isSourceBmp &&
+      !isSourceGif &&
+      !isSourceWebp &&
+      (options.sourceFormat === 'png' ||
+        (!isSourceWebp &&
+          (fileName.toLowerCase().endsWith('.png') ||
+            request.mimeType === 'image/png' ||
+            (isTargetJpg && !isSourceWebp))));
+    isSourceJpg = !isSourceBmp && !isSourceGif && !isSourceWebp && !isSourcePng;
+  }
 
   const expectedInputDesc = isSourceBmp
     ? 'BMP'
@@ -184,7 +266,9 @@ export async function processImageJob(
             id,
             success: false,
             type: 'error',
-            error: 'This BMP is too large to process in your browser.',
+            error: isCompress
+              ? 'This image is too large to compress in your browser.'
+              : 'This BMP is too large to process in your browser.',
             errorCode: 'BROWSER_MEMORY_ERROR',
           };
         }
@@ -210,7 +294,9 @@ export async function processImageJob(
           id,
           success: false,
           type: 'error',
-          error: 'This GIF is too large to process in your browser.',
+          error: isCompress
+            ? 'This image is too large to compress in your browser.'
+            : 'This GIF is too large to process in your browser.',
           errorCode: 'BROWSER_MEMORY_ERROR',
         };
       }
@@ -223,6 +309,15 @@ export async function processImageJob(
         type: 'error',
         error: 'This file is not a valid WebP image.',
         errorCode: 'INVALID_FILE',
+      };
+    }
+    if (isCompress && isAnimatedWebp(bytes)) {
+      return {
+        id,
+        success: false,
+        type: 'error',
+        error: 'Animated WebP files are not supported by this compression tool.',
+        errorCode: 'UNSUPPORTED_FORMAT',
       };
     }
   } else if (isSourcePng) {
@@ -371,12 +466,30 @@ export async function processImageJob(
     };
   }
 
+  if (width > 8192 || height > 8192) {
+    bitmap.close();
+    return {
+      id,
+      success: false,
+      type: 'error',
+      error: isCompress
+        ? 'This image is too large to compress in your browser.'
+        : 'This image is too large for your browser to process.',
+      errorCode: 'BROWSER_MEMORY_ERROR',
+    };
+  }
+
   // 4. Encoding Stage (70 - 90%)
   postProgress?.('encoding', 85);
   let encodedBlob: Blob;
 
   const targetMime = isTargetWebp ? 'image/webp' : isTargetJpg ? 'image/jpeg' : 'image/png';
-  const quality = typeof options.quality === 'number' ? Math.max(0.1, Math.min(1.0, options.quality)) : 0.9;
+  const quality =
+    typeof options.quality === 'number'
+      ? Math.max(0.1, Math.min(1.0, options.quality))
+      : isCompress
+      ? 0.8
+      : 0.9;
   const rawBg = typeof options.backgroundColor === 'string' ? options.backgroundColor.trim() : '';
   const backgroundColor =
     rawBg.toUpperCase() === '#000000' || rawBg.toLowerCase() === 'black' ? '#000000' : '#FFFFFF';
@@ -391,13 +504,15 @@ export async function processImageJob(
           id,
           success: false,
           type: 'error',
-          error: "We couldn't convert this image. Please try again.",
+          error: isCompress
+            ? "We couldn't compress this image. Please try again."
+            : "We couldn't convert this image. Please try again.",
           errorCode: 'PROCESSING_FAILED',
         };
       }
 
-      // If converting to JPG, fill solid background first (transparency handling)
-      if (isTargetJpg) {
+      // If converting to JPG (from transparent format), fill solid background first
+      if (!isCompress && isTargetJpg) {
         ctx.fillStyle = backgroundColor;
         ctx.fillRect(0, 0, width, height);
       }
@@ -455,13 +570,15 @@ export async function processImageJob(
           id,
           success: false,
           type: 'error',
-          error: "We couldn't convert this image. Please try again.",
+          error: isCompress
+            ? "We couldn't compress this image. Please try again."
+            : "We couldn't convert this image. Please try again.",
           errorCode: 'PROCESSING_FAILED',
         };
       }
 
-      // If converting to JPG, fill solid background first (transparency handling)
-      if (isTargetJpg) {
+      // If converting to JPG (from transparent format), fill solid background first
+      if (!isCompress && isTargetJpg) {
         ctx.fillStyle = backgroundColor;
         ctx.fillRect(0, 0, width, height);
       }
@@ -531,7 +648,9 @@ export async function processImageJob(
         id,
         success: false,
         type: 'error',
-        error: 'This image is too large for your browser to process.',
+        error: isCompress
+          ? 'This image is too large to compress in your browser.'
+          : 'This image is too large for your browser to process.',
         errorCode: 'BROWSER_MEMORY_ERROR',
       };
     }
@@ -539,17 +658,27 @@ export async function processImageJob(
       id,
       success: false,
       type: 'error',
-      error: "We couldn't convert this image. Please try again.",
+      error: isCompress
+        ? "We couldn't compress this image. Please try again."
+        : "We couldn't convert this image. Please try again.",
       errorCode: 'PROCESSING_FAILED',
     };
   }
 
   // 5. Finalizing Stage (90 - 100%)
   postProgress?.('finalizing', 95);
-  const resultData = await encodedBlob.arrayBuffer();
+  let resultData: ArrayBuffer;
+  if (isCompress && isSourcePng && encodedBlob.size >= originalSize) {
+    // Lossless PNG retention: if output is not smaller than original, keep original
+    resultData = fileData;
+  } else {
+    resultData = await encodedBlob.arrayBuffer();
+  }
   postProgress?.('finalizing', 100);
 
-  const outputFileName = isTargetWebp
+  const outputFileName = isCompress
+    ? fileName
+    : isTargetWebp
     ? toWebpFilename(fileName)
     : isTargetJpg
     ? toJpgFilename(fileName)

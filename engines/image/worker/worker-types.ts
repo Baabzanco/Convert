@@ -12,7 +12,7 @@ export interface ImageWorkerRequest {
   mimeType: string;
   options: {
     targetFormat?: 'png' | 'jpg' | 'webp';
-    sourceFormat?: 'png' | 'jpg' | 'webp' | 'heic' | 'gif' | 'bmp';
+    sourceFormat?: 'png' | 'jpg' | 'jpeg' | 'webp' | 'heic' | 'gif' | 'bmp';
     quality?: number;
     backgroundColor?: string;
     [key: string]: unknown;

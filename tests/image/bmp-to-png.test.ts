@@ -6,7 +6,6 @@ import {
   validateBmpBuffer,
   parseBmpDimensions,
   hasBmpMagicBytes,
-  BMP_LIMITS,
 } from '../../engines/image/bmp/bmp-validator';
 import { convertBmpToPng } from '../../engines/image/convert';
 import { validateFileCount, hasPngMagicBytes } from '../../engines/shared/validation';

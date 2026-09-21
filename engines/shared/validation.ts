@@ -124,6 +124,55 @@ export function hasWebpMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
 }
 
 /**
+ * Checks if a byte buffer represents an animated WebP file.
+ * Evaluates the VP8X header animation flag (bit 1 of flags byte) and scans for ANIM/ANMF chunks.
+ */
+export function isAnimatedWebp(buffer: ArrayBuffer | Uint8Array): boolean {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  if (bytes.length < 20) return false;
+  if (!hasWebpMagicBytes(bytes)) return false;
+
+  // Check VP8X chunk (offset 12..15: 'VP8X')
+  if (
+    bytes[12] === 0x56 && // 'V'
+    bytes[13] === 0x50 && // 'P'
+    bytes[14] === 0x38 && // '8'
+    bytes[15] === 0x58    // 'X'
+  ) {
+    if (bytes.length >= 21) {
+      // Flags byte is at offset 20. Bit 1 (0x02) = Animation
+      const flags = bytes[20];
+      if ((flags & 0x02) !== 0) {
+        return true;
+      }
+    }
+  }
+
+  // Scan for 'ANIM' or 'ANMF' FourCC chunks in the RIFF header
+  const maxScan = Math.min(bytes.length - 4, 4096);
+  for (let i = 12; i < maxScan; i++) {
+    if (
+      bytes[i] === 0x41 && // 'A'
+      bytes[i + 1] === 0x4e && // 'N'
+      bytes[i + 2] === 0x49 && // 'I'
+      bytes[i + 3] === 0x4d    // 'M'
+    ) {
+      return true;
+    }
+    if (
+      bytes[i] === 0x41 && // 'A'
+      bytes[i + 1] === 0x4e && // 'N'
+      bytes[i + 2] === 0x4d && // 'M'
+      bytes[i + 3] === 0x46    // 'F'
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Checks if a byte buffer starts with the BMP 'BM' signature (0x42, 0x4D).
  */
 export function hasBmpMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
@@ -480,6 +529,98 @@ export {
   parseBmpDimensions,
   BMP_LIMITS,
 } from '../image/bmp/bmp-validator';
+
+export const COMPRESS_IMAGE_LIMITS = {
+  MAX_FILE_SIZE_BYTES: 50 * 1024 * 1024, // 50 MB
+  MAX_BATCH_FILES: 20,
+  MAX_DIMENSION: 8192,
+  ALLOWED_EXTENSIONS: ['jpg', 'jpeg', 'png', 'webp'],
+  ALLOWED_MIMES: ['image/jpeg', 'image/png', 'image/webp'],
+};
+
+/**
+ * Validates an image file intended for compression.
+ * Checks size, extension, MIME, binary magic bytes, animated WebP restriction, and header format.
+ */
+export async function validateCompressibleImageFile(file: File): Promise<ValidationResult> {
+  // 1. Size validation
+  if (file.size > COMPRESS_IMAGE_LIMITS.MAX_FILE_SIZE_BYTES) {
+    return {
+      valid: false,
+      error: new ToolError('FILE_TOO_LARGE', 'This file is too large. Maximum size is 50 MB.'),
+    };
+  }
+
+  // 2. Extension validation
+  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+  if (!COMPRESS_IMAGE_LIMITS.ALLOWED_EXTENSIONS.includes(ext)) {
+    return {
+      valid: false,
+      error: new ToolError('UNSUPPORTED_FORMAT', 'Only JPG, JPEG, PNG, and WebP files are supported for compression.'),
+    };
+  }
+
+  // 3. MIME validation (if provided by browser)
+  const conflictingMimes = [
+    'application/pdf',
+    'image/gif',
+    'image/bmp',
+    'image/heic',
+    'image/heif',
+    'image/svg+xml',
+    'text/plain',
+    'application/zip',
+  ];
+  if (file.type && conflictingMimes.includes(file.type.toLowerCase())) {
+    return {
+      valid: false,
+      error: new ToolError('UNSUPPORTED_FORMAT', 'Only JPG, JPEG, PNG, and WebP files are supported for compression.'),
+    };
+  }
+
+  // 4. Binary signature validation
+  try {
+    const slice = file.slice(0, 4096);
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    if (ext === 'jpg' || ext === 'jpeg') {
+      if (!hasJpegMagicBytes(bytes)) {
+        return {
+          valid: false,
+          error: new ToolError('INVALID_FILE', 'This file is not a valid JPEG image.'),
+        };
+      }
+    } else if (ext === 'png') {
+      if (!hasPngMagicBytes(bytes)) {
+        return {
+          valid: false,
+          error: new ToolError('INVALID_FILE', 'This file is not a valid PNG image.'),
+        };
+      }
+    } else if (ext === 'webp') {
+      if (!hasWebpMagicBytes(bytes)) {
+        return {
+          valid: false,
+          error: new ToolError('INVALID_FILE', 'This file is not a valid WebP image.'),
+        };
+      }
+      if (isAnimatedWebp(bytes)) {
+        return {
+          valid: false,
+          error: new ToolError('UNSUPPORTED_FORMAT', 'Animated WebP files are not supported by this compression tool.'),
+        };
+      }
+    }
+  } catch {
+    return {
+      valid: false,
+      error: new ToolError('INVALID_FILE', 'Could not read image file header for validation.'),
+    };
+  }
+
+  return { valid: true };
+}
 
 export function validateFile(file: File, rules: ValidationRule): ValidationResult {
   const isPdf = rules.allowedExtensions?.some((ext) => ext.toLowerCase().includes('pdf')) || false;
