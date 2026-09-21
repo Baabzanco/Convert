@@ -1,0 +1,326 @@
+import type { ImageWorkerRequest, ImageWorkerResponse } from './worker-types';
+
+/**
+ * Checks if buffer starts with JPEG SOI: FF D8 FF
+ */
+function isJpeg(bytes: Uint8Array): boolean {
+  return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+}
+
+/**
+ * Checks if buffer starts with PNG signature: 89 50 4E 47 0D 0A 1A 0A
+ */
+function isPng(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x4e &&
+    bytes[3] === 0x47 &&
+    bytes[4] === 0x0d &&
+    bytes[5] === 0x0a &&
+    bytes[6] === 0x1a &&
+    bytes[7] === 0x0a
+  );
+}
+
+/**
+ * Replaces extension with .png
+ */
+function toPngFilename(name: string): string {
+  const lastDot = name.lastIndexOf('.');
+  const stem = lastDot === -1 ? name : name.substring(0, lastDot);
+  return `${stem}.png`;
+}
+
+/**
+ * Replaces extension with .jpg
+ */
+function toJpgFilename(name: string): string {
+  const lastDot = name.lastIndexOf('.');
+  const stem = lastDot === -1 ? name : name.substring(0, lastDot);
+  return `${stem}.jpg`;
+}
+
+/**
+ * Core image processing logic.
+ * Usable inside Web Worker and as direct fallback.
+ */
+export async function processImageJob(
+  request: ImageWorkerRequest,
+  postProgress?: (stage: 'validating' | 'reading' | 'decoding' | 'encoding' | 'finalizing', percent: number) => void
+): Promise<ImageWorkerResponse> {
+  const { id, fileData, fileName, operation, options } = request;
+
+  if (operation !== 'convert' || (options.targetFormat !== 'png' && options.targetFormat !== 'jpg')) {
+    return {
+      id,
+      success: false,
+      type: 'error',
+      error: 'Unsupported conversion format.',
+      errorCode: 'UNSUPPORTED_FORMAT',
+    };
+  }
+
+  const isTargetJpg = options.targetFormat === 'jpg';
+  const expectedInputDesc = isTargetJpg ? 'PNG' : 'JPEG';
+
+  // 1. Validating Stage (0 - 20%)
+  postProgress?.('validating', 15);
+  const bytes = new Uint8Array(fileData);
+
+  if (isTargetJpg) {
+    if (!isPng(bytes)) {
+      return {
+        id,
+        success: false,
+        type: 'error',
+        error: 'This file is not a valid PNG image.',
+        errorCode: 'INVALID_FILE',
+      };
+    }
+  } else {
+    if (!isJpeg(bytes)) {
+      return {
+        id,
+        success: false,
+        type: 'error',
+        error: 'This file is not a valid JPEG image.',
+        errorCode: 'INVALID_FILE',
+      };
+    }
+  }
+
+  // 2. Reading Stage (20 - 45%)
+  postProgress?.('reading', 35);
+  const originalSize = fileData.byteLength;
+  const inputMime = isTargetJpg ? 'image/png' : 'image/jpeg';
+  const blob = new Blob([fileData], { type: inputMime });
+
+  // 3. Decoding Stage (45 - 70%)
+  postProgress?.('decoding', 60);
+  let bitmap: ImageBitmap;
+  try {
+    if (typeof createImageBitmap === 'function') {
+      try {
+        // Automatically handle EXIF orientation to preserve correct photograph orientation
+        bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+      } catch {
+        // Fallback if imageOrientation option is not supported
+        bitmap = await createImageBitmap(blob);
+      }
+    } else {
+      throw new Error('createImageBitmap not supported in this context');
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message.toLowerCase() : '';
+    if (message.includes('memory') || message.includes('quota') || message.includes('out of memory')) {
+      return {
+        id,
+        success: false,
+        type: 'error',
+        error: 'This image is too large for your browser to process.',
+        errorCode: 'BROWSER_MEMORY_ERROR',
+      };
+    }
+    return {
+      id,
+      success: false,
+      type: 'error',
+      error: `This file is not a valid ${expectedInputDesc} image.`,
+      errorCode: 'INVALID_FILE',
+    };
+  }
+
+  const width = bitmap.width;
+  const height = bitmap.height;
+
+  if (!width || !height || width <= 0 || height <= 0) {
+    bitmap.close();
+    return {
+      id,
+      success: false,
+      type: 'error',
+      error: `This file is not a valid ${expectedInputDesc} image.`,
+      errorCode: 'INVALID_FILE',
+    };
+  }
+
+  // 4. Encoding Stage (70 - 90%)
+  postProgress?.('encoding', 85);
+  let encodedBlob: Blob;
+
+  const targetMime = isTargetJpg ? 'image/jpeg' : 'image/png';
+  const quality = typeof options.quality === 'number' ? Math.max(0.1, Math.min(1.0, options.quality)) : 0.9;
+  const rawBg = typeof options.backgroundColor === 'string' ? options.backgroundColor.trim() : '';
+  const backgroundColor =
+    rawBg.toUpperCase() === '#000000' || rawBg.toLowerCase() === 'black' ? '#000000' : '#FFFFFF';
+
+  try {
+    if (typeof OffscreenCanvas !== 'undefined') {
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        bitmap.close();
+        return {
+          id,
+          success: false,
+          type: 'error',
+          error: "We couldn't convert this image. Please try again.",
+          errorCode: 'PROCESSING_FAILED',
+        };
+      }
+
+      // If converting to JPG, fill solid background first (transparency handling)
+      if (isTargetJpg) {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      // Draw decoded image on top
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close(); // Immediate memory cleanup
+
+      if (isTargetJpg) {
+        encodedBlob = await canvas.convertToBlob({ type: targetMime, quality });
+      } else {
+        encodedBlob = await canvas.convertToBlob({ type: targetMime });
+      }
+    } else if (typeof document !== 'undefined') {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        bitmap.close();
+        return {
+          id,
+          success: false,
+          type: 'error',
+          error: "We couldn't convert this image. Please try again.",
+          errorCode: 'PROCESSING_FAILED',
+        };
+      }
+
+      // If converting to JPG, fill solid background first (transparency handling)
+      if (isTargetJpg) {
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, width, height);
+      }
+
+      // Draw decoded image on top
+      ctx.drawImage(bitmap, 0, 0);
+      bitmap.close(); // Immediate memory cleanup
+
+      encodedBlob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob(
+          (b) => {
+            if (b) resolve(b);
+            else reject(new Error(`Canvas encoding to ${isTargetJpg ? 'JPEG' : 'PNG'} failed`));
+          },
+          targetMime,
+          isTargetJpg ? quality : undefined
+        );
+      });
+    } else {
+      bitmap.close();
+      return {
+        id,
+        success: false,
+        type: 'error',
+        error: 'Image canvas encoding is not supported in this runtime.',
+        errorCode: 'PROCESSING_FAILED',
+      };
+    }
+  } catch (err: unknown) {
+    bitmap.close();
+    const message = err instanceof Error ? err.message.toLowerCase() : '';
+    if (message.includes('memory') || message.includes('quota') || message.includes('out of memory')) {
+      return {
+        id,
+        success: false,
+        type: 'error',
+        error: 'This image is too large for your browser to process.',
+        errorCode: 'BROWSER_MEMORY_ERROR',
+      };
+    }
+    return {
+      id,
+      success: false,
+      type: 'error',
+      error: "We couldn't convert this image. Please try again.",
+      errorCode: 'PROCESSING_FAILED',
+    };
+  }
+
+  // 5. Finalizing Stage (90 - 100%)
+  postProgress?.('finalizing', 95);
+  const resultData = await encodedBlob.arrayBuffer();
+  postProgress?.('finalizing', 100);
+
+  const outputFileName = isTargetJpg ? toJpgFilename(fileName) : toPngFilename(fileName);
+
+  return {
+    id,
+    success: true,
+    type: 'success',
+    resultData,
+    resultMime: targetMime,
+    fileName: outputFileName,
+    width,
+    height,
+    originalSize,
+    convertedSize: resultData.byteLength,
+  };
+}
+
+// Worker execution context helper for typed postMessage & listener
+const workerScope = (typeof self !== 'undefined' ? self : null) as unknown as {
+  postMessage: (message: unknown, transfer?: Transferable[]) => void;
+  addEventListener: (type: string, listener: (event: unknown) => void) => void;
+  importScripts?: (...urls: string[]) => void;
+} | null;
+
+/**
+ * Worker message event listener.
+ */
+export async function handleWorkerMessage(event: MessageEvent<ImageWorkerRequest>): Promise<void> {
+  const request = event.data;
+  if (!request || !request.id) return;
+
+  try {
+    const result = await processImageJob(request, (stage, percent) => {
+      const progressMessage: ImageWorkerResponse = {
+        id: request.id,
+        success: true,
+        type: 'progress',
+        stage,
+        progress: percent,
+      };
+      workerScope?.postMessage(progressMessage);
+    });
+
+    if (result.resultData) {
+      workerScope?.postMessage(result, [result.resultData]);
+    } else {
+      workerScope?.postMessage(result);
+    }
+  } catch {
+    const errorMessage: ImageWorkerResponse = {
+      id: request.id,
+      success: false,
+      type: 'error',
+      error: "We couldn't convert this image. Please try again.",
+      errorCode: 'PROCESSING_FAILED',
+    };
+    workerScope?.postMessage(errorMessage);
+  }
+}
+
+// Attach listener in Web Worker environment
+if (workerScope && typeof workerScope.importScripts === 'function') {
+  workerScope.addEventListener('message', (event: unknown) => {
+    handleWorkerMessage(event as MessageEvent<ImageWorkerRequest>);
+  });
+}
+
