@@ -23,6 +23,8 @@ import { BmpToPngController } from './BmpToPngController';
 import { CompressImageController } from './CompressImageController';
 import { ResizeImageController } from './ResizeImageController';
 import { CropImageController } from './CropImageController';
+import { RotateImageController } from './RotateImageController';
+import { ImageToPdfController } from './ImageToPdfController';
 import { ShieldCheck, Zap, Lock, Cpu, Sparkles } from 'lucide-react';
 import JsonLd from '@/components/seo/JsonLd';
 import { createWebApplicationSchema, createBreadcrumbSchema, siteConfig } from '@/lib/seo';
@@ -115,6 +117,10 @@ export function ToolPage({ tool }: ToolPageProps) {
             <ResizeImageController />
           ) : tool.slug === 'crop-image' ? (
             <CropImageController />
+          ) : tool.slug === 'rotate-image' ? (
+            <RotateImageController />
+          ) : tool.slug === 'image-to-pdf' ? (
+            <ImageToPdfController />
           ) : (
             <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-card p-6 md:p-8 shadow-subtle mb-6">
               <div className="max-w-2xl mx-auto space-y-6">

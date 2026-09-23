@@ -371,7 +371,7 @@ export function CompressImageController() {
       : 0;
 
   return (
-    <div className="space-y-6 mb-8">
+    <div data-hydrated={isHydrated ? 'true' : 'false'} className="space-y-6 mb-8">
       {/* Global alert banner */}
       {globalMessage && (
         <div

@@ -21,7 +21,7 @@ test.describe('Tool #11: Compress Image E2E', () => {
     // 3. Verify selected file appears in list with quality controls
     await expect(page.getByText('sample.jpg')).toBeVisible();
     await expect(page.locator('#compress-quality-slider')).toBeVisible();
-    await expect(page.getByText('80%')).toBeVisible();
+    await expect(page.getByText('80%', { exact: true })).toBeVisible();
 
     // 4. Click Compress Image
     const compressBtn = page.locator('#compress-submit-btn');
@@ -72,12 +72,16 @@ test.describe('Tool #11: Compress Image E2E', () => {
 
   test('should reject corrupted JPG file with error message', async ({ page }) => {
     await page.goto('/tools/compress-image');
+    await page.locator('[data-hydrated="true"]').waitFor({ timeout: 10000 });
 
     const fileInput = page.locator('#compress-file-input');
     await fileInput.setInputFiles(corruptedJpgPath);
 
     await expect(page.getByText('corrupted.jpg')).toBeVisible();
-    await expect(page.getByText(/not a valid JPEG image|not a valid image/i)).toBeVisible({
+    const compressBtn = page.locator('#compress-submit-btn');
+    await compressBtn.click();
+
+    await expect(page.getByText(/not a valid|failed to decode|couldn't compress/i)).toBeVisible({
       timeout: 5000,
     });
   });

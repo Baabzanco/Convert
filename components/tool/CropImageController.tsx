@@ -8,8 +8,6 @@ import {
   Download,
   CheckCircle2,
   Crop as CropIcon,
-  Maximize2,
-  Sliders,
 } from 'lucide-react';
 import { formatBytes, triggerBlobDownload } from '@/engines/shared/file-utils';
 import { cropImage, ImageCropOptions, CropImageResult } from '@/engines/image/crop';
@@ -288,7 +286,8 @@ export function CropImageController() {
   // Keyboard navigation for accessibility
   const handleKeyDown = (e: React.KeyboardEvent) => {
     const step = e.shiftKey ? 10 : 1;
-    let { x, y, width, height } = cropBox;
+    let { x, y } = cropBox;
+    const { width, height } = cropBox;
 
     if (e.key === 'ArrowLeft') x -= step;
     else if (e.key === 'ArrowRight') x += step;

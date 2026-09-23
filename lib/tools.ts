@@ -569,29 +569,7 @@ export const TOOLS: ToolDefinition[] = [
     relatedTools: ['crop-image', 'compress-image', 'rotate-image'],
   },
 
-  // 13. Crop Image
-  {
-    slug: 'crop-image',
-    name: 'Crop Image',
-    category: 'image-utility',
-    inputFormats: ['jpg', 'jpeg', 'png', 'webp'],
-    outputFormats: ['jpg', 'png', 'webp'],
-    engine: 'image-crop',
-    clientSide: true,
-    title: 'Crop Image Online – Trim & Frame Photos Free',
-    description: 'Crop photos online with custom aspect ratios or freehand framing. Cut out unwanted areas and frame your images.',
-    h1: 'Crop Images Online',
-    intro: 'Trim unwanted borders or focus on specific subjects with our visual crop tool. Supports square (1:1), 16:9, 4:3, and freeform framing.',
-    howTo: [
-      { title: 'Upload image', description: 'Select the photo you want to crop.' },
-      { title: 'Adjust crop frame', description: 'Drag the handles or select a preset ratio.' },
-      { title: 'Download cropped image', description: 'Export your newly cropped image.' },
-    ],
-    faq: [
-      { question: 'Are standard social media presets supported?', answer: 'Yes, presets for profile avatars, banners, and standard aspect ratios are available.' },
-    ],
-    relatedTools: ['resize-image', 'rotate-image', 'compress-image'],
-  },
+
 
   // 14. Rotate Image
   {
@@ -599,46 +577,85 @@ export const TOOLS: ToolDefinition[] = [
     name: 'Rotate Image',
     category: 'image-utility',
     inputFormats: ['jpg', 'jpeg', 'png', 'webp'],
-    outputFormats: ['jpg', 'png', 'webp'],
+    outputFormats: ['original', 'jpg', 'png', 'webp'],
     engine: 'image-rotate',
     clientSide: true,
-    title: 'Rotate Image Online – 90°, 180° & Flip Horizontally/Vertically',
-    description: 'Rotate photos 90 degrees clockwise, counter-clockwise, 180 degrees, or flip mirrored orientations with one click.',
-    h1: 'Rotate and Flip Images',
-    intro: 'Fix sideways or upside-down smartphone photos in seconds. Rotate by 90-degree increments or flip horizontally and vertically.',
+    title: 'Rotate Image Online Free - JPG, PNG & WebP | Convert',
+    description: 'Rotate JPG, PNG and WebP images online for free. Rotate images 90°, 180° or 270° directly in your browser without uploading them to a server.',
+    h1: 'Rotate Images Online',
+    intro: 'Rotate your photos and graphics instantly by 90°, 180°, or 270° clockwise or counter-clockwise. Process single images or batch-rotate multiple files securely in your browser.',
     howTo: [
-      { title: 'Upload image', description: 'Choose any photo that needs orientation correction.' },
-      { title: 'Rotate or flip', description: 'Click 90° clockwise, 90° counter-clockwise, or flip buttons.' },
-      { title: 'Save corrected photo', description: 'Download your properly oriented image.' },
+      { title: 'Upload image(s)', description: 'Select one or multiple JPG, PNG, or WebP images.' },
+      { title: 'Choose rotation', description: 'Rotate left (-90°), right (+90°), or 180°. For batch mode, the shared rotation applies to all selected images.' },
+      { title: 'Export & download', description: 'Click Rotate Image to process and download your rotated files individually or as a ZIP archive.' },
+    ],
+    features: [
+      { title: 'Precise 90°, 180°, 270° Rotation', description: 'Easily correct orientation with precise right, left, and upside-down rotation controls.' },
+      { title: 'Batch Processing', description: 'Apply a shared rotation setting to up to 20 images simultaneously.' },
+      { title: 'Lossless Original Resolution', description: 'Processes directly from source pixels without downscaling or quality loss.' },
+      { title: 'Transparency Preservation', description: 'Fully preserves PNG and WebP transparency, with automatic white background for JPG output.' },
+      { title: 'Multiple Output Formats', description: 'Export rotated images in original format or convert to JPG, PNG, or WebP.' },
+      { title: '100% Browser-Based Security', description: 'Processing happens locally on your device. Your files never leave your computer.' },
     ],
     faq: [
-      { question: 'Does rotating degrade photo quality?', answer: 'No, lossless rotation preserves the exact original pixels without recompressing needlessly.' },
+      { question: 'Can I rotate an image by 90 degrees?', answer: 'Yes! You can rotate an image clockwise or counter-clockwise by 90 degrees.' },
+      { question: 'Can I rotate multiple images at once?', answer: 'Yes. You can select up to 20 supported images and apply the same rotation to the entire batch.' },
+      { question: 'Can I rotate an image by 180 degrees?', answer: 'Yes, 180-degree upside-down rotation is fully supported.' },
+      { question: 'Does rotating an image reduce its quality?', answer: 'No. Rotation preserves the full original resolution and pixel dimensions.' },
+      { question: 'Does the tool preserve PNG transparency?', answer: 'Yes, transparency is fully preserved when exporting to PNG or WebP format.' },
+      { question: 'Are my images uploaded to a server?', answer: 'No. All rotation and processing occur entirely within your browser for complete privacy.' },
     ],
-    relatedTools: ['crop-image', 'resize-image', 'compress-image'],
+    relatedTools: ['crop-image', 'resize-image', 'compress-image', 'jpg-to-png', 'png-to-jpg'],
   },
 
   // 15. Image to PDF
   {
     slug: 'image-to-pdf',
     name: 'Image to PDF',
-    category: 'image-utility',
-    inputFormats: ['jpg', 'jpeg', 'png', 'webp', 'bmp'],
+    category: 'image-converter',
+    inputFormats: ['jpg', 'jpeg', 'png', 'webp'],
     outputFormats: ['pdf'],
     engine: 'image-to-pdf',
     clientSide: true,
-    title: 'Image to PDF Converter – Combine Photos into a Single PDF Document',
-    description: 'Convert multiple JPG, PNG, and WEBP photos into a clean, paginated PDF document. Reorder pages and configure margins easily.',
+    title: 'Image to PDF Converter – Convert JPG, PNG & WebP to PDF',
+    description: 'Convert JPG, PNG, and WebP images to PDF online for free. Combine multiple images into one PDF with fast browser-based processing.',
     h1: 'Convert Images to PDF',
-    intro: 'Combine multiple photos, receipts, or document scans into a professional, shareable PDF file right inside your browser.',
+    intro: 'Convert JPG, PNG, and WebP images into a clean, paginated PDF document. Reorder pages, customize orientation, and combine multiple photos securely without server uploads.',
     howTo: [
-      { title: 'Add images', description: 'Upload all images you wish to include in your document.' },
-      { title: 'Order pages', description: 'Arrange photos into your preferred sequence.' },
-      { title: 'Create PDF', description: 'Generate and download your combined PDF file.' },
+      { title: 'Upload images', description: 'Upload your JPG, PNG, or WebP images.' },
+      { title: 'Arrange page order', description: 'Arrange the images in the order you want using the arrow buttons.' },
+      { title: 'Choose layout settings', description: 'Select your preferred page orientation and margin.' },
+      { title: 'Generate & download', description: 'Create your combined document and download the PDF.' },
     ],
     faq: [
-      { question: 'Can I mix different image formats in one PDF?', answer: 'Yes, you can combine JPG, PNG, and WEBP files into a single unified PDF.' },
+      {
+        question: 'Can I convert multiple images into one PDF?',
+        answer: 'Yes. Upload multiple JPG, PNG, or WebP images and they will be combined into a single PDF, with each image becoming one page.',
+      },
+      {
+        question: 'Can I reorder images before creating the PDF?',
+        answer: 'Yes. You can change the image order before generating the PDF using the move up and move down controls.',
+      },
+      {
+        question: 'Are my images uploaded to a server?',
+        answer: 'No. All processing happens entirely within your browser using client-side technology. Your files never leave your device.',
+      },
+      {
+        question: 'What image formats are supported?',
+        answer: 'JPG/JPEG, PNG, and static WebP images up to 50 MB each.',
+      },
+      {
+        question: 'What PDF page size is used?',
+        answer: 'Standard A4 is used by default with automatic orientation matching each photo aspect ratio.',
+      },
     ],
-    relatedTools: ['jpg-to-pdf', 'png-to-pdf', 'merge-pdf'],
+    features: [
+      { title: 'Combine Up to 20 Photos', description: 'Merge multiple images into a single multi-page PDF document.' },
+      { title: 'Custom Page Ordering', description: 'Easily reorder pages with accessible up and down controls.' },
+      { title: 'Smart Contain Scaling', description: 'Images are scaled proportionally and centered with clean margins.' },
+      { title: '100% Client-Side Privacy', description: 'All PDF generation runs in your browser without cloud uploads.' },
+    ],
+    relatedTools: ['jpg-to-png', 'png-to-jpg', 'compress-image', 'resize-image', 'crop-image', 'rotate-image'],
   },
 
   // 16. JPG to PDF
@@ -919,6 +936,7 @@ export const TOOLS: ToolDefinition[] = [
     ],
     relatedTools: ['resize-image', 'compress-image', 'jpg-to-png', 'png-to-jpg'],
   },
+
 ];
 
 export function getToolBySlug(slug: string): ToolDefinition | undefined {

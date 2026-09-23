@@ -28,7 +28,7 @@ test.describe('SVG to PNG Conversion Tool E2E', () => {
     await expect(page.getByText('Converted', { exact: true })).toBeVisible({ timeout: 15000 });
 
     // 6. Verify single download button appears
-    const downloadBtn = page.getByRole('button', { name: /Download/i });
+    const downloadBtn = page.getByRole('button', { name: 'Download', exact: true });
     await expect(downloadBtn).toBeVisible();
 
     // 7. Verify download triggers with .png extension

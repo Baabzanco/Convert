@@ -147,10 +147,11 @@ export async function processImageJob(
   const isCompress = operation === 'compress';
   const isResize = operation === 'resize';
   const isCrop = operation === 'crop';
+  const isRotate = operation === 'rotate';
 
   if (
-    (!isCompress && !isResize && !isCrop && operation !== 'convert') ||
-    (!isCompress && !isResize && !isCrop && options.targetFormat !== 'png' && options.targetFormat !== 'jpg' && options.targetFormat !== 'webp')
+    (!isCompress && !isResize && !isCrop && !isRotate && operation !== 'convert') ||
+    (!isCompress && !isResize && !isCrop && !isRotate && options.targetFormat !== 'png' && options.targetFormat !== 'jpg' && options.targetFormat !== 'webp')
   ) {
     return {
       id,
@@ -169,7 +170,7 @@ export async function processImageJob(
   let isSourcePng = false;
   let isSourceJpg = false;
 
-  if (isCompress || isResize || isCrop) {
+  if (isCompress || isResize || isCrop || isRotate) {
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     const mime = (request.mimeType || '').toLowerCase();
     const optSrc = options.sourceFormat;
@@ -195,12 +196,14 @@ export async function processImageJob(
           ? 'Only JPG, JPEG, PNG, and WebP files are supported for cropping.'
           : isResize
           ? 'Only JPG, JPEG, PNG, and WebP files are supported for resizing.'
+          : isRotate
+          ? 'Only JPG, JPEG, PNG, and WebP files are supported for rotation.'
           : 'Only JPG, JPEG, PNG, and WebP files are supported for compression.',
         errorCode: 'UNSUPPORTED_FORMAT',
       };
     }
 
-    if (isResize || isCrop) {
+    if (isResize || isCrop || isRotate) {
       const targetFormatOption = options.targetFormat;
       if (targetFormatOption === 'jpg') {
         isTargetJpg = true;
@@ -506,15 +509,22 @@ export async function processImageJob(
     if (cropSh <= 0) cropSh = 1;
   }
 
+  const rotateDeg = isRotate ? ((Number(options.degrees) || 0) % 360 + 360) % 360 : 0;
+  const swapDimensions = isRotate && (rotateDeg === 90 || rotateDeg === 270);
+
   const targetWidth = isCrop
     ? cropSw
     : isResize && typeof options.width === 'number' && options.width > 0
     ? options.width
+    : swapDimensions
+    ? height
     : width;
   const targetHeight = isCrop
     ? cropSh
     : isResize && typeof options.height === 'number' && options.height > 0
     ? options.height
+    : swapDimensions
+    ? width
     : height;
 
   if (targetWidth > 8192 || targetHeight > 8192 || (targetWidth * targetHeight) > 67108864 || targetWidth <= 0 || targetHeight <= 0) {
@@ -588,6 +598,12 @@ export async function processImageJob(
       // Draw decoded image on top
       if (isCrop) {
         ctx.drawImage(bitmap, cropSx, cropSy, cropSw, cropSh, 0, 0, targetWidth, targetHeight);
+      } else if (isRotate) {
+        ctx.save();
+        ctx.translate(targetWidth / 2, targetHeight / 2);
+        ctx.rotate((rotateDeg * Math.PI) / 180);
+        ctx.drawImage(bitmap, -width / 2, -height / 2);
+        ctx.restore();
       } else {
         ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
       }
@@ -662,6 +678,12 @@ export async function processImageJob(
       // Draw decoded image on top
       if (isCrop) {
         ctx.drawImage(bitmap, cropSx, cropSy, cropSw, cropSh, 0, 0, targetWidth, targetHeight);
+      } else if (isRotate) {
+        ctx.save();
+        ctx.translate(targetWidth / 2, targetHeight / 2);
+        ctx.rotate((rotateDeg * Math.PI) / 180);
+        ctx.drawImage(bitmap, -width / 2, -height / 2);
+        ctx.restore();
       } else {
         ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
       }
@@ -766,7 +788,7 @@ export async function processImageJob(
 
   const outputFileName = isCompress
     ? fileName
-    : (isResize || isCrop)
+    : (isResize || isCrop || isRotate)
     ? (isTargetJpg
         ? toJpgFilename(fileName)
         : isTargetWebp

@@ -14,7 +14,7 @@ test.describe('Tool #9: GIF to PNG Conversion E2E', () => {
     await expect(page.locator('h1')).toHaveText('Convert GIF to PNG');
 
     // 2. Check note is present
-    await expect(page.getByText(/Animated GIF files are converted using the first frame/i)).toBeVisible();
+    await expect(page.getByText(/Animated GIF files are converted using the first frame/i).first()).toBeVisible();
 
     // 3. Upload valid GIF file
     const fileInput = page.locator('#gif-file-input');

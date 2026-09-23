@@ -6,18 +6,18 @@ describe('Image Engine Base Architecture', () => {
   it('should register all 15 image tools', () => {
     const converters = getToolsByCategory('image-converter');
     const utilities = getToolsByCategory('image-utility');
-    expect(converters.length).toBe(10);
-    expect(utilities.length).toBe(6);
-    expect(converters.length + utilities.length).toBe(16);
+    expect(converters.length).toBe(11);
+    expect(utilities.length).toBe(4);
+    expect(converters.length + utilities.length).toBe(15);
   });
 
-  it('should resolve jpg-to-png tool definition correctly', () => {
-    const tool = getToolBySlug('jpg-to-png');
+  it('should resolve rotate-image tool definition correctly', () => {
+    const tool = getToolBySlug('rotate-image');
     expect(tool).toBeDefined();
-    expect(tool?.name).toBe('JPG to PNG');
-    expect(tool?.category).toBe('image-converter');
+    expect(tool?.name).toBe('Rotate Image');
+    expect(tool?.category).toBe('image-utility');
     expect(tool?.inputFormats).toContain('jpg');
-    expect(tool?.outputFormats).toContain('png');
+    expect(tool?.outputFormats).toContain('jpg');
     expect(tool?.clientSide).toBe(true);
   });
 
