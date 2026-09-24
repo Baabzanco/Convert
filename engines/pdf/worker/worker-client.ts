@@ -38,9 +38,14 @@ export class PdfWorkerClient {
         }
       };
 
-      this.worker.onerror = () => {
+      this.worker.onerror = (err) => {
         this.workerFailed = true;
+        const currentTasks = Array.from(this.pendingTasks.values());
+        this.pendingTasks.clear();
         this.terminate();
+        for (const task of currentTasks) {
+          task.reject(err);
+        }
       };
 
       return this.worker;
@@ -58,10 +63,20 @@ export class PdfWorkerClient {
     const worker = this.initWorker();
 
     if (worker) {
-      return new Promise<PdfWorkerResponse>((resolve, reject) => {
-        this.pendingTasks.set(request.id, { resolve, reject, onProgress });
-        worker.postMessage(request);
-      });
+      try {
+        const result = await new Promise<PdfWorkerResponse>((resolve, reject) => {
+          this.pendingTasks.set(request.id, { resolve, reject, onProgress });
+          try {
+            worker.postMessage(request);
+          } catch (postErr) {
+            this.pendingTasks.delete(request.id);
+            reject(postErr);
+          }
+        });
+        return result;
+      } catch {
+        // Fallback to in-process execution on worker error
+      }
     }
 
     // Direct in-process fallback

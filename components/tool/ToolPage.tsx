@@ -27,6 +27,9 @@ import { RotateImageController } from './RotateImageController';
 import { ImageToPdfController } from './ImageToPdfController';
 import { JpgToPdfController } from './JpgToPdfController';
 import { PngToPdfController } from './PngToPdfController';
+import { PdfToJpgController } from './PdfToJpgController';
+import { PdfToPngController } from './PdfToPngController';
+import { MergePdfController } from './MergePdfController';
 import { ShieldCheck, Zap, Lock, Cpu, Sparkles } from 'lucide-react';
 import JsonLd from '@/components/seo/JsonLd';
 import { createWebApplicationSchema, createBreadcrumbSchema, siteConfig } from '@/lib/seo';
@@ -127,6 +130,12 @@ export function ToolPage({ tool }: ToolPageProps) {
             <JpgToPdfController />
           ) : tool.slug === 'png-to-pdf' ? (
             <PngToPdfController />
+          ) : tool.slug === 'pdf-to-jpg' ? (
+            <PdfToJpgController />
+          ) : tool.slug === 'pdf-to-png' ? (
+            <PdfToPngController />
+          ) : tool.slug === 'merge-pdf' ? (
+            <MergePdfController />
           ) : (
             <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-card p-6 md:p-8 shadow-subtle mb-6">
               <div className="max-w-2xl mx-auto space-y-6">

@@ -4,8 +4,38 @@ import {
   hasJpegMagicBytes,
   hasPngMagicBytes,
   hasWebpMagicBytes,
+  hasPdfMagicBytes,
   isAnimatedWebp,
 } from '../shared/validation';
+
+export const PDF_TO_JPG_LIMITS = {
+  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100 MB
+  MAX_FILES: 1,
+  MAX_PAGE_COUNT: 250,
+  MAX_CANVAS_DIMENSION: 8192,
+  MAX_CANVAS_PIXELS: 67108864, // 8192 * 8192
+  ALLOWED_EXTENSIONS: ['pdf'],
+  ALLOWED_MIMES: ['application/pdf', 'application/x-pdf'],
+};
+
+export const PDF_TO_PNG_LIMITS = {
+  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100 MB
+  MAX_FILES: 1,
+  MAX_PAGE_COUNT: 250,
+  MAX_CANVAS_DIMENSION: 8192,
+  MAX_CANVAS_PIXELS: 67108864, // 8192 * 8192
+  ALLOWED_EXTENSIONS: ['pdf'],
+  ALLOWED_MIMES: ['application/pdf', 'application/x-pdf'],
+};
+
+export const MERGE_PDF_LIMITS = {
+  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100 MB per file
+  MAX_BATCH_FILES: 20,
+  MIN_FILES: 2,
+  MAX_AGGREGATE_SIZE: 250 * 1024 * 1024, // 250 MB total batch limit
+  ALLOWED_EXTENSIONS: ['pdf'],
+  ALLOWED_MIMES: ['application/pdf', 'application/x-pdf'],
+};
 
 export const IMAGE_TO_PDF_LIMITS = {
   MAX_FILE_SIZE: 50 * 1024 * 1024, // 50 MB
@@ -335,6 +365,247 @@ export function validateImageToPdfBatch(files: File[]): { valid: boolean; error?
     };
   }
   return { valid: true };
+}
+
+export async function validatePdfToJpgFile(
+  file: File
+): Promise<{ valid: boolean; error?: ToolError }> {
+  // 1. File size check (100 MB max)
+  if (file.size > PDF_TO_JPG_LIMITS.MAX_FILE_SIZE) {
+    return {
+      valid: false,
+      error: new ToolError('FILE_TOO_LARGE', 'This file is too large. The maximum PDF size is 100 MB.'),
+    };
+  }
+
+  // 2. Empty file check
+  if (file.size === 0) {
+    return {
+      valid: false,
+      error: new ToolError('INVALID_FILE', 'This file is empty. Please choose a valid PDF file.'),
+    };
+  }
+
+  // 3. Extension check
+  const ext = file.name.split('.').pop()?.toLowerCase() || '';
+  if (!PDF_TO_JPG_LIMITS.ALLOWED_EXTENSIONS.includes(ext)) {
+    return {
+      valid: false,
+      error: new ToolError(
+        'UNSUPPORTED_FORMAT',
+        'This file is not a valid PDF. Please choose a valid PDF file.'
+      ),
+    };
+  }
+
+  // 4. MIME type check if present
+  const conflictingMimes = [
+    'image/jpeg',
+    'image/jpg',
+    'image/pjpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'image/bmp',
+    'image/heic',
+    'image/heif',
+    'image/svg+xml',
+    'text/plain',
+    'application/zip',
+  ];
+  if (file.type && conflictingMimes.includes(file.type.toLowerCase())) {
+    return {
+      valid: false,
+      error: new ToolError(
+        'UNSUPPORTED_FORMAT',
+        'This file is not a valid PDF. Please choose a valid PDF file.'
+      ),
+    };
+  }
+
+  // 5. Binary signature check (PDF magic bytes %PDF-)
+  try {
+    const slice = file.slice(0, 4096);
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    if (!hasPdfMagicBytes(bytes)) {
+      return {
+        valid: false,
+        error: new ToolError(
+          'INVALID_FILE',
+          'This file is not a valid PDF. Please choose a valid PDF file.'
+        ),
+      };
+    }
+  } catch {
+    return {
+      valid: false,
+      error: new ToolError(
+        'INVALID_FILE',
+        "We couldn't read this PDF. Please try another file."
+      ),
+    };
+  }
+
+  return { valid: true };
+}
+
+export async function validatePdfToPngFile(
+  file: File
+): Promise<{ valid: boolean; error?: ToolError }> {
+  return validatePdfToJpgFile(file);
+}
+
+export async function validateMergePdfFile(
+  file: File
+): Promise<{ valid: boolean; error?: ToolError }> {
+  return validatePdfToJpgFile(file);
+}
+
+export function validateMergePdfBatch(
+  files: File[]
+): { valid: boolean; error?: ToolError } {
+  if (!files || files.length === 0) {
+    return {
+      valid: false,
+      error: new ToolError('INVALID_FILE', 'Select at least 2 PDF files to merge.'),
+    };
+  }
+
+  if (files.length < MERGE_PDF_LIMITS.MIN_FILES) {
+    return {
+      valid: false,
+      error: new ToolError(
+        'INVALID_FILE',
+        'Add at least one more PDF to merge.'
+      ),
+    };
+  }
+
+  if (files.length > MERGE_PDF_LIMITS.MAX_BATCH_FILES) {
+    return {
+      valid: false,
+      error: new ToolError(
+        'INVALID_FILE',
+        `You can merge up to ${MERGE_PDF_LIMITS.MAX_BATCH_FILES} PDF files at a time.`
+      ),
+    };
+  }
+
+  const totalSize = files.reduce((acc, f) => acc + f.size, 0);
+  if (totalSize > MERGE_PDF_LIMITS.MAX_AGGREGATE_SIZE) {
+    return {
+      valid: false,
+      error: new ToolError(
+        'FILE_TOO_LARGE',
+        `Total batch size exceeds the limit of ${Math.round(
+          MERGE_PDF_LIMITS.MAX_AGGREGATE_SIZE / (1024 * 1024)
+        )} MB. Try merging fewer or smaller files.`
+      ),
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Validates and parses page range expressions like "1-3, 5, 8-10".
+ * Returns strict error if any page token is out of bounds (1..totalPages) or malformed.
+ */
+export function validateAndParsePageRange(
+  rangeStr: string,
+  totalPages: number
+): { valid: boolean; pages: number[]; error?: string } {
+  const trimmed = rangeStr.trim();
+  if (!trimmed) {
+    return { valid: false, pages: [], error: 'Select at least one page to convert.' };
+  }
+
+  const parts = trimmed.split(',').map((p) => p.trim());
+  const pageSet = new Set<number>();
+
+  for (const part of parts) {
+    if (!part) {
+      return {
+        valid: false,
+        pages: [],
+        error: `Invalid page selection expression "${rangeStr}".`,
+      };
+    }
+
+    if (part.includes('-')) {
+      const match = part.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (!match) {
+        return {
+          valid: false,
+          pages: [],
+          error: `Invalid page range "${part}". Use formats like "1-5".`,
+        };
+      }
+      const start = parseInt(match[1], 10);
+      const end = parseInt(match[2], 10);
+
+      if (start < 1 || start > totalPages) {
+        return {
+          valid: false,
+          pages: [],
+          error: `Page ${start} is out of range. This document has ${totalPages} ${
+            totalPages === 1 ? 'page' : 'pages'
+          }.`,
+        };
+      }
+      if (end < 1 || end > totalPages) {
+        return {
+          valid: false,
+          pages: [],
+          error: `Page ${end} is out of range. This document has ${totalPages} ${
+            totalPages === 1 ? 'page' : 'pages'
+          }.`,
+        };
+      }
+      if (start > end) {
+        return {
+          valid: false,
+          pages: [],
+          error: `Invalid range "${part}". Start page (${start}) cannot be greater than end page (${end}).`,
+        };
+      }
+
+      for (let i = start; i <= end; i++) {
+        pageSet.add(i);
+      }
+    } else {
+      const match = part.match(/^(\d+)$/);
+      if (!match) {
+        return {
+          valid: false,
+          pages: [],
+          error: `Invalid page number "${part}". Use formats like "1, 3, 5".`,
+        };
+      }
+      const page = parseInt(match[1], 10);
+      if (page < 1 || page > totalPages) {
+        return {
+          valid: false,
+          pages: [],
+          error: `Page ${page} is out of range. This document has ${totalPages} ${
+            totalPages === 1 ? 'page' : 'pages'
+          }.`,
+        };
+      }
+      pageSet.add(page);
+    }
+  }
+
+  if (pageSet.size === 0) {
+    return { valid: false, pages: [], error: 'Select at least one page to convert.' };
+  }
+
+  return {
+    valid: true,
+    pages: Array.from(pageSet).sort((a, b) => a - b),
+  };
 }
 
 export function validatePdfFile(file: File): { valid: boolean; error?: ToolError } {

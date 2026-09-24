@@ -104,6 +104,120 @@ export async function processPdfWorkerJob(
     return;
   }
 
+  if (operation === 'merge') {
+    try {
+      const totalFiles = files.length;
+      if (totalFiles < 2) {
+        postMessageFn({
+          id,
+          type: 'error',
+          success: false,
+          error: 'Add at least one more PDF to merge.',
+        });
+        return;
+      }
+
+      postMessageFn({
+        id,
+        type: 'progress',
+        success: true,
+        stage: 'preparing',
+        progress: 5,
+        totalCount: totalFiles,
+      });
+
+      const mergedPdf = await PDFDocument.create();
+      let totalMergedPages = 0;
+
+      for (let i = 0; i < totalFiles; i++) {
+        const fileItem = files[i];
+        const progressVal = Math.round(10 + ((i + 0.5) / totalFiles) * 80);
+
+        postMessageFn({
+          id,
+          type: 'progress',
+          success: true,
+          stage: 'processing',
+          currentIndex: i + 1,
+          totalCount: totalFiles,
+          fileName: fileItem.name,
+          progress: progressVal,
+        });
+
+        let sourcePdf: PDFDocument;
+        try {
+          sourcePdf = await PDFDocument.load(fileItem.data, {
+            ignoreEncryption: false,
+          });
+        } catch (loadErr: unknown) {
+          const loadMsg = loadErr instanceof Error ? loadErr.message : '';
+          if (/password|encrypt/i.test(loadMsg)) {
+            throw new Error('This PDF is password-protected. Please provide an unlocked PDF.', {
+              cause: loadErr,
+            });
+          }
+          if (/memory|allocation/i.test(loadMsg)) {
+            throw new Error(
+              'Your browser ran out of memory while merging these PDFs. Try merging fewer or smaller files.',
+              { cause: loadErr }
+            );
+          }
+          throw new Error(
+            "We couldn't read one of your PDF files. Please remove it or choose another PDF.",
+            { cause: loadErr }
+          );
+        }
+
+        const pageIndices = sourcePdf.getPageIndices();
+        if (pageIndices.length === 0) {
+          throw new Error(`The file "${fileItem.name}" does not contain any pages.`);
+        }
+
+        const copiedPages = await mergedPdf.copyPages(sourcePdf, pageIndices);
+        for (const page of copiedPages) {
+          mergedPdf.addPage(page);
+          totalMergedPages++;
+        }
+      }
+
+      postMessageFn({
+        id,
+        type: 'progress',
+        success: true,
+        stage: 'finalizing',
+        progress: 95,
+        totalCount: totalFiles,
+      });
+
+      const pdfBytes = await mergedPdf.save();
+      const safeBuffer = new Uint8Array(pdfBytes).buffer;
+
+      postMessageFn({
+        id,
+        type: 'result',
+        success: true,
+        stage: 'completed',
+        progress: 100,
+        totalCount: totalFiles,
+        pageCount: totalMergedPages,
+        resultData: safeBuffer,
+        resultFileName: options.outputFileName || 'merged.pdf',
+      });
+    } catch (err: unknown) {
+      let errorMsg = err instanceof Error ? err.message : 'PDF merge failed.';
+      if (/memory|allocation/i.test(errorMsg)) {
+        errorMsg = 'Your browser ran out of memory while merging these PDFs. Try merging fewer or smaller files.';
+      }
+      postMessageFn({
+        id,
+        type: 'error',
+        success: false,
+        error: errorMsg,
+      });
+    }
+    return;
+  }
+
   postMessageFn({
     id,
     type: 'error',

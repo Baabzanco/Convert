@@ -5,6 +5,7 @@ export type ToolErrorCode =
   | 'PROCESSING_FAILED'
   | 'BROWSER_MEMORY_ERROR'
   | 'PDF_READ_ERROR'
+  | 'PASSWORD_PROTECTED'
   | 'UNKNOWN_ERROR';
 
 export class ToolError extends Error {
@@ -27,6 +28,7 @@ export const ERROR_MESSAGES: Record<ToolErrorCode, string> = {
   PROCESSING_FAILED: "We couldn't convert this image. Please try again.",
   BROWSER_MEMORY_ERROR: 'This image is too large for your browser to process.',
   PDF_READ_ERROR: 'Unable to parse the PDF document. The file may be password-protected or corrupted.',
+  PASSWORD_PROTECTED: 'This PDF is password-protected. Please provide an unlocked PDF.',
   UNKNOWN_ERROR: 'Something went wrong. Please try again.',
 };
 

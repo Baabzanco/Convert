@@ -79,6 +79,27 @@ export function validateFileMime(file: File, allowedMimes: string[]): Validation
 }
 
 /**
+ * Checks if the given buffer starts with %PDF- (0x25, 0x50, 0x44, 0x46, 0x2D)
+ */
+export function hasPdfMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  if (bytes.length < 5) return false;
+  // A PDF file signature %PDF-
+  for (let i = 0; i < Math.min(bytes.length - 4, 1024); i++) {
+    if (
+      bytes[i] === 0x25 && // '%'
+      bytes[i + 1] === 0x50 && // 'P'
+      bytes[i + 2] === 0x44 && // 'D'
+      bytes[i + 3] === 0x46 && // 'F'
+      bytes[i + 4] === 0x2d // '-'
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Checks if the given buffer starts with the JPEG SOI signature: FF D8 FF
  */
 export function hasJpegMagicBytes(buffer: ArrayBuffer | Uint8Array): boolean {
