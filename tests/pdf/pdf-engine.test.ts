@@ -4,12 +4,12 @@ import { parsePageRangeString } from '../../engines/pdf/utils';
 import { VALIDATION_LIMITS } from '../../engines/shared/validation';
 
 describe('PDF Engine Base Architecture', () => {
-  it('should register all 10 PDF tools', () => {
+  it('should register all PDF tools', () => {
     const converters = getToolsByCategory('pdf-converter');
     const utilities = getToolsByCategory('pdf-utility');
-    expect(converters.length).toBe(4);
+    expect(converters.length).toBe(2);
     expect(utilities.length).toBe(6);
-    expect(converters.length + utilities.length).toBe(10);
+    expect(converters.length + utilities.length).toBe(8);
   });
 
   it('should resolve merge-pdf and split-pdf tool definitions', () => {

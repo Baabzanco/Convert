@@ -3,12 +3,12 @@ import { getToolsByCategory, getToolBySlug } from '../../lib/tools';
 import { VALIDATION_LIMITS, validateFileSize } from '../../engines/shared/validation';
 
 describe('Image Engine Base Architecture', () => {
-  it('should register all 15 image tools', () => {
+  it('should register all 17 image tools', () => {
     const converters = getToolsByCategory('image-converter');
     const utilities = getToolsByCategory('image-utility');
-    expect(converters.length).toBe(11);
+    expect(converters.length).toBe(13);
     expect(utilities.length).toBe(4);
-    expect(converters.length + utilities.length).toBe(15);
+    expect(converters.length + utilities.length).toBe(17);
   });
 
   it('should resolve rotate-image tool definition correctly', () => {

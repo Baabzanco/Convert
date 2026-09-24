@@ -16,6 +16,7 @@ export interface ImageToPdfOptions {
   pageSize?: PdfPageSize;
   orientation?: PdfOrientation;
   margin?: number;
+  outputFileName?: string;
 }
 
 export interface ImageToPdfProgress {
@@ -485,7 +486,9 @@ export async function convertImagesToPdf(
     const blob = new Blob([safeBuffer], { type: 'application/pdf' });
 
     let fileName: string;
-    if (totalFiles === 1) {
+    if (options.outputFileName) {
+      fileName = options.outputFileName;
+    } else if (totalFiles === 1) {
       fileName = replaceFileExtension(files[0].name, 'pdf');
     } else {
       fileName = 'images-to-pdf.pdf';
@@ -516,6 +519,6 @@ export async function convertImagesToPdf(
         'Your browser ran out of memory while creating the PDF. Try fewer or smaller images.'
       );
     }
-    throw new ToolError('PROCESSING_FAILED', "We couldn't convert this image. Please try again.");
+    throw new ToolError('PROCESSING_FAILED', "We couldn't create the PDF from these images. Please try again with another file.");
   }
 }

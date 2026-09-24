@@ -89,7 +89,9 @@ export async function processPdfWorkerJob(
         totalCount: totalFiles,
         pageCount: totalFiles,
         resultData: safeBuffer,
-        resultFileName: totalFiles === 1 ? fileItemNameToPdf(files[0].name) : 'images-to-pdf.pdf',
+        resultFileName:
+          options.outputFileName ||
+          (totalFiles === 1 ? fileItemNameToPdf(files[0].name) : 'images-to-pdf.pdf'),
       });
     } catch (err: unknown) {
       postMessageFn({

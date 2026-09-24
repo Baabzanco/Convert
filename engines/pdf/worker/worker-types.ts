@@ -24,6 +24,7 @@ export interface PdfWorkerRequest {
     pageSize?: 'A4';
     orientation?: 'auto' | 'portrait' | 'landscape';
     margin?: number;
+    outputFileName?: string;
     [key: string]: unknown;
   };
 }
