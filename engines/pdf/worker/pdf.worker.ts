@@ -218,6 +218,113 @@ export async function processPdfWorkerJob(
     return;
   }
 
+  if (operation === 'compress') {
+    try {
+      const fileItem = files[0];
+      if (!fileItem) {
+        postMessageFn({
+          id,
+          type: 'error',
+          success: false,
+          error: 'No PDF file provided for compression.',
+        });
+        return;
+      }
+
+      postMessageFn({
+        id,
+        type: 'progress',
+        success: true,
+        stage: 'preparing',
+        progress: 10,
+        fileName: fileItem.name,
+      });
+
+      const originalBytes = new Uint8Array(fileItem.data);
+      let sourceDoc: PDFDocument;
+      try {
+        sourceDoc = await PDFDocument.load(originalBytes, { ignoreEncryption: false });
+      } catch (loadErr: unknown) {
+        const loadMsg = loadErr instanceof Error ? loadErr.message : '';
+        if (/password|encrypt/i.test(loadMsg)) {
+          throw new Error('This PDF is password-protected. Please provide an unlocked PDF.', {
+            cause: loadErr,
+          });
+        }
+        if (/memory|allocation/i.test(loadMsg)) {
+          throw new Error('Your browser ran out of memory while compressing this PDF. Try a smaller PDF.', {
+            cause: loadErr,
+          });
+        }
+        throw new Error("We couldn't read this PDF file. Please try another file.", {
+          cause: loadErr,
+        });
+      }
+
+      const pageCount = sourceDoc.getPageCount();
+      if (pageCount === 0) {
+        throw new Error('The PDF document does not contain any pages.');
+      }
+
+      postMessageFn({
+        id,
+        type: 'progress',
+        success: true,
+        stage: 'processing',
+        progress: 50,
+        fileName: fileItem.name,
+      });
+
+      // Attempt structural stream compression
+      let compressedBytes: Uint8Array | null = null;
+      try {
+        compressedBytes = await sourceDoc.save({ useObjectStreams: true });
+      } catch {
+        // Fallback
+      }
+
+      if (!compressedBytes || compressedBytes.byteLength === 0) {
+        compressedBytes = originalBytes;
+      }
+
+      postMessageFn({
+        id,
+        type: 'progress',
+        success: true,
+        stage: 'finalizing',
+        progress: 95,
+        fileName: fileItem.name,
+      });
+
+      const isSmaller = compressedBytes.byteLength < originalBytes.byteLength;
+      const finalBytes = isSmaller ? compressedBytes : originalBytes;
+      const safeBuffer = new Uint8Array(finalBytes).buffer;
+
+      postMessageFn({
+        id,
+        type: 'result',
+        success: true,
+        stage: 'completed',
+        progress: 100,
+        pageCount,
+        resultData: safeBuffer,
+        resultFileName: options.outputFileName || fileItem.name,
+      });
+    } catch (err: unknown) {
+      let errorMsg = err instanceof Error ? err.message : 'PDF compression failed.';
+      if (/memory|allocation/i.test(errorMsg)) {
+        errorMsg = 'Your browser ran out of memory while compressing this PDF. Try a smaller PDF.';
+      }
+      postMessageFn({
+        id,
+        type: 'error',
+        success: false,
+        error: errorMsg,
+      });
+    }
+    return;
+  }
+
   postMessageFn({
     id,
     type: 'error',

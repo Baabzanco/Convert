@@ -153,3 +153,18 @@ export function createFAQSchema(faqList: { question: string; answer: string }[])
     })),
   };
 }
+
+export function createHowToSchema(name: string, description: string, steps: { title: string; description: string }[]) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'HowTo',
+    name,
+    description,
+    step: steps.map((s, index) => ({
+      '@type': 'HowToStep',
+      position: index + 1,
+      name: s.title,
+      text: s.description,
+    })),
+  };
+}

@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "./node_modules/.bin/playwright test"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.3",

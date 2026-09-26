@@ -37,6 +37,21 @@ export const MERGE_PDF_LIMITS = {
   ALLOWED_MIMES: ['application/pdf', 'application/x-pdf'],
 };
 
+export const SPLIT_PDF_LIMITS = {
+  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100 MB
+  MAX_FILES: 1,
+  MAX_PAGE_COUNT: 500,
+  ALLOWED_EXTENSIONS: ['pdf'],
+  ALLOWED_MIMES: ['application/pdf', 'application/x-pdf'],
+};
+
+export const COMPRESS_PDF_LIMITS = {
+  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100 MB
+  MAX_FILES: 1,
+  ALLOWED_EXTENSIONS: ['pdf'],
+  ALLOWED_MIMES: ['application/pdf', 'application/x-pdf'],
+};
+
 export const IMAGE_TO_PDF_LIMITS = {
   MAX_FILE_SIZE: 50 * 1024 * 1024, // 50 MB
   MAX_BATCH_FILES: 20,
@@ -605,6 +620,150 @@ export function validateAndParsePageRange(
   return {
     valid: true,
     pages: Array.from(pageSet).sort((a, b) => a - b),
+  };
+}
+
+export async function validateSplitPdfFile(
+  file: File
+): Promise<{ valid: boolean; error?: ToolError }> {
+  return validatePdfToJpgFile(file);
+}
+
+export async function validateCompressPdfFile(
+  file: File
+): Promise<{ valid: boolean; error?: ToolError }> {
+  return validatePdfToJpgFile(file);
+}
+
+export interface ParsedSplitRange {
+  start: number;
+  end: number;
+  pages: number[];
+  label: string;
+}
+
+/**
+ * Parses split page ranges like "1-3, 4-8, 9-12" or "1-5, 8" into discrete range segments.
+ */
+export function parseSplitRanges(
+  rangeStr: string,
+  totalPages: number
+): { valid: boolean; ranges: ParsedSplitRange[]; error?: string } {
+  const trimmed = rangeStr.trim();
+  if (!trimmed) {
+    return {
+      valid: false,
+      ranges: [],
+      error: 'Please specify at least one page or page range (e.g. 1-3, 4-8).',
+    };
+  }
+
+  // Support splitting by comma, semicolon, or newline
+  const parts = trimmed
+    .split(/[,;\n]+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return {
+      valid: false,
+      ranges: [],
+      error: 'Please specify at least one page or page range (e.g. 1-3, 4-8).',
+    };
+  }
+
+  const ranges: ParsedSplitRange[] = [];
+
+  for (const part of parts) {
+    if (part.includes('-')) {
+      const match = part.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (!match) {
+        return {
+          valid: false,
+          ranges: [],
+          error: `Invalid page range "${part}". Use formats like "1-5" or "1, 3, 5".`,
+        };
+      }
+      const start = parseInt(match[1], 10);
+      const end = parseInt(match[2], 10);
+
+      if (start < 1 || start > totalPages) {
+        return {
+          valid: false,
+          ranges: [],
+          error: `Page ${start} in range "${part}" is out of range. Document has ${totalPages} ${
+            totalPages === 1 ? 'page' : 'pages'
+          }.`,
+        };
+      }
+      if (end < 1 || end > totalPages) {
+        return {
+          valid: false,
+          ranges: [],
+          error: `Page ${end} in range "${part}" is out of range. Document has ${totalPages} ${
+            totalPages === 1 ? 'page' : 'pages'
+          }.`,
+        };
+      }
+      if (start > end) {
+        return {
+          valid: false,
+          ranges: [],
+          error: `Invalid range "${part}". Start page (${start}) cannot be greater than end page (${end}).`,
+        };
+      }
+
+      const pages: number[] = [];
+      for (let i = start; i <= end; i++) {
+        pages.push(i);
+      }
+
+      ranges.push({
+        start,
+        end,
+        pages,
+        label: start === end ? `Page ${start}` : `Pages ${start}-${end}`,
+      });
+    } else {
+      const match = part.match(/^(\d+)$/);
+      if (!match) {
+        return {
+          valid: false,
+          ranges: [],
+          error: `Invalid page number "${part}". Use numbers like "1, 3, 5".`,
+        };
+      }
+      const page = parseInt(match[1], 10);
+      if (page < 1 || page > totalPages) {
+        return {
+          valid: false,
+          ranges: [],
+          error: `Page ${page} is out of range. Document has ${totalPages} ${
+            totalPages === 1 ? 'page' : 'pages'
+          }.`,
+        };
+      }
+
+      ranges.push({
+        start: page,
+        end: page,
+        pages: [page],
+        label: `Page ${page}`,
+      });
+    }
+  }
+
+  if (ranges.length === 0) {
+    return {
+      valid: false,
+      ranges: [],
+      error: 'Please specify at least one valid page range.',
+    };
+  }
+
+  return {
+    valid: true,
+    ranges,
   };
 }
 

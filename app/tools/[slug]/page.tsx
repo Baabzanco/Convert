@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getAllTools, getToolBySlug } from '@/lib/tools';
 import ToolPage from '@/components/tool/ToolPage';
+import { siteConfig } from '@/lib/seo';
 
 interface ToolRouteProps {
   params: Promise<{ slug: string }>;
@@ -25,14 +26,23 @@ export async function generateMetadata({ params }: ToolRouteProps): Promise<Meta
     };
   }
 
+  const canonicalUrl = `${siteConfig.url}/tools/${tool.slug}`;
+
   return {
     title: tool.title,
     description: tool.description,
+    alternates: {
+      canonical: canonicalUrl,
+    },
     openGraph: {
       title: tool.title,
       description: tool.description,
+      url: canonicalUrl,
+      siteName: siteConfig.name,
+      type: 'website',
     },
     twitter: {
+      card: 'summary_large_image',
       title: tool.title,
       description: tool.description,
     },
@@ -49,3 +59,4 @@ export default async function DynamicToolPage({ params }: ToolRouteProps) {
 
   return <ToolPage tool={tool} />;
 }
+

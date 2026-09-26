@@ -13,6 +13,7 @@ export interface ToolDefinition {
   title: string;
   description: string;
   h1: string;
+  valueProposition?: string;
   intro: string;
   howTo: {
     title: string;
@@ -22,10 +23,20 @@ export interface ToolDefinition {
     title: string;
     description: string;
   }[];
+  privacyNote?: {
+    title: string;
+    description: string;
+    bullets?: string[];
+  };
+  useCases?: {
+    title: string;
+    description: string;
+  }[];
   faq: {
     question: string;
     answer: string;
   }[];
+  youMayAlsoNeed?: string[];
   relatedTools: string[];
 }
 
@@ -39,29 +50,114 @@ export const TOOLS: ToolDefinition[] = [
     outputFormats: ['png'],
     engine: 'image-convert',
     clientSide: true,
-    title: 'Convert JPG to PNG Online – Free Browser-Based Converter',
-    description: 'Convert JPG and JPEG images to PNG format directly in your browser. Free, fast, and secure with no file uploads to a server and no registration required.',
-    h1: 'Convert JPG to PNG',
-    intro: 'Convert your JPG or JPEG images to PNG format for free, directly inside your web browser. There is no software to install, no registration, and no file uploads to external servers—all processing happens entirely on your device.',
+    title: 'Convert JPG to PNG Online for Free – Fast & Private Image Converter',
+    description: 'Convert JPG and JPEG images to PNG format directly in your browser. 100% free, fast client-side conversion, no file uploads, and no registration required.',
+    h1: 'Convert JPG to PNG Online for Free',
+    valueProposition: 'Convert JPG and JPEG images into crisp PNG files directly in your web browser. 100% free, no registration required, and zero file uploads—processing happens locally on your device for fast results and complete privacy.',
+    intro: 'Need to convert your JPG or JPEG images into PNG files? This free browser-based tool allows you to convert photos, graphics, and illustrations without installing software or uploading sensitive files to external servers. While JPG uses lossy compression best suited for photography, PNG provides lossless raster encoding and supports sharp graphic boundaries—making it the preferred format for web graphics, logos, screenshots, and document publishing. All conversion operations run locally on your device via modern Web Workers for maximum speed and privacy.',
     howTo: [
-      { title: 'Upload your JPG or JPEG files', description: 'Select or drag and drop up to 20 JPG or JPEG images from your device (up to 50 MB each).' },
-      { title: 'Click Convert to PNG', description: 'Click the Convert button to process your images locally in your browser.' },
-      { title: 'Download your PNG files', description: 'Download individual PNG files or grab all converted images in a single ZIP file.' },
+      {
+        title: 'Select or drop your JPG files',
+        description: 'Click the upload area to choose JPG or JPEG images from your device, or drag and drop files directly into the dropzone. You can add up to 20 files at once, with a maximum size of 50 MB per file.',
+      },
+      {
+        title: 'Click Convert to PNG',
+        description: 'Click the "Convert to PNG" button to start processing. The converter decodes and encodes your images locally in your browser memory without uploading them to any remote server.',
+      },
+      {
+        title: 'Download your PNG files',
+        description: 'Once processing is finished, download individual PNG files with the download button or click "Download All (ZIP)" to save all converted images at once in a single ZIP archive.',
+      },
     ],
     features: [
-      { title: 'Browser-Based Processing', description: 'Conversions execute locally in your browser using modern Web Workers, without sending files over the internet.' },
-      { title: 'Supports JPG and JPEG', description: 'Accepts standard .jpg and .jpeg files up to 50 MB per file.' },
-      { title: 'Multiple Files & ZIP Download', description: 'Process up to 20 files at once and download individual outputs or all files as a ZIP archive.' },
-      { title: 'Original Dimensions Preserved', description: 'Maintains your exact pixel width and height without automatic resizing or loss of resolution.' },
+      {
+        title: '100% Client-Side Processing',
+        description: 'Image decoding and PNG encoding are performed entirely in your browser using Web Workers. Your files are never sent across the internet.',
+      },
+      {
+        title: 'Supports JPG & JPEG Formats',
+        description: 'Accepts both standard .jpg and .jpeg image files with automatic file signature (magic bytes) validation.',
+      },
+      {
+        title: 'Batch File Processing',
+        description: 'Convert up to 20 files in a single session with real-time individual and batch progress indicators.',
+      },
+      {
+        title: '50 MB File Size Allowance',
+        description: 'Handles high-resolution camera photos and large graphic files up to 50 MB per image smoothly.',
+      },
+      {
+        title: 'Original Dimensions Preserved',
+        description: 'Maintains the exact original pixel width and height of your images without unwanted compression, resizing, or downsampling.',
+      },
+      {
+        title: 'Single & ZIP Download Options',
+        description: 'Download each converted PNG individually or save all converted images simultaneously in a clean ZIP archive.',
+      },
+    ],
+    privacyNote: {
+      title: 'Your Files Stay Private on Your Device',
+      description: 'Unlike conventional online file converters that upload your photos to remote cloud servers, this tool executes 100% inside your web browser. Your images are never transmitted over the internet, stored on external hard drives, or seen by third parties.',
+      bullets: [
+        'Zero server uploads: File data is read and converted directly in your browser memory.',
+        'No telemetry or tracking: We do not inspect, log, or retain copies of your images.',
+        'Automatic cleanup: Memory URLs are safely released when files are cleared or when you leave the page.',
+      ],
+    },
+    useCases: [
+      {
+        title: 'Graphic Design & Digital Art Assets',
+        description: 'Convert photographic assets and reference images into PNG format to import them into design workflows and layer-based editors without lossy JPEG artifacts.',
+      },
+      {
+        title: 'Website, UI & App Development',
+        description: 'Prepare raster icons, illustrations, and user avatars for web and mobile applications where PNG format standards are required by your development stack.',
+      },
+      {
+        title: 'Document & Presentation Publishing',
+        description: 'Embed high-clarity images into Word documents, PDFs, slide decks, and spreadsheets where sharp lines and artifact-free rendering are essential.',
+      },
+      {
+        title: 'Preventing Repeated Compression Loss',
+        description: 'Re-saving a JPG multiple times causes generational compression degradation. Converting to PNG stops further lossy degradation during iterative editing.',
+      },
     ],
     faq: [
-      { question: 'What is the difference between JPG and PNG?', answer: 'JPG is a compressed format commonly used for digital photography, while PNG provides clean rendering for graphics and supports transparency.' },
-      { question: 'Can I convert multiple JPG files at once?', answer: 'Yes, you can select up to 20 JPG or JPEG images at once and download each converted PNG individually or all together as a ZIP file.' },
-      { question: 'Will the image dimensions change?', answer: 'No, the output PNG will keep the exact original width and height dimensions of your source JPEG image.' },
-      { question: 'Are my files uploaded to a server?', answer: 'No. The conversion is performed entirely in your browser using client-side processing. Your files never leave your device.' },
-      { question: 'Is JPG to PNG conversion free?', answer: 'Yes, this converter is completely free with no registration, subscriptions, or hidden charges.' },
+      {
+        question: 'Is this JPG to PNG converter free to use?',
+        answer: 'Yes, this tool is 100% free with no registration, subscriptions, watermarks, or hidden usage fees.',
+      },
+      {
+        question: 'Are my JPG files uploaded to your servers?',
+        answer: 'No. All conversions are performed locally in your web browser using client-side JavaScript and Web Workers. Your files never leave your device.',
+      },
+      {
+        question: 'Do I need to install software or create an account?',
+        answer: 'No installation or sign-up is required. The converter works instantly in any modern web browser on desktop, tablet, or mobile.',
+      },
+      {
+        question: 'Can I convert multiple JPG files at once?',
+        answer: 'Yes, you can upload and convert up to 20 JPG or JPEG files simultaneously in a single batch, and download them individually or as a combined ZIP archive.',
+      },
+      {
+        question: 'What is the maximum file size supported?',
+        answer: 'You can convert files up to 50 MB each, accommodating large high-resolution photos and detailed graphics.',
+      },
+      {
+        question: 'Will converting JPG to PNG make my image transparent?',
+        answer: 'No. Standard JPG files do not contain an alpha (transparency) channel. Converting to PNG retains the original opaque pixels. Once in PNG format, you can easily open the image in an editor to erase or remove backgrounds without lossy compression.',
+      },
+      {
+        question: 'Will the resolution or dimensions change after conversion?',
+        answer: 'No, the output PNG file keeps the exact original pixel width and height of your source JPEG image.',
+      },
+      {
+        question: 'Does this tool work on mobile devices?',
+        answer: 'Yes. The converter is fully responsive and functions directly in modern mobile browsers on iOS and Android devices without requiring any app installations.',
+      },
     ],
-    relatedTools: ['png-to-jpg', 'jpg-to-webp', 'compress-image', 'image-to-pdf'],
+    youMayAlsoNeed: ['png-to-jpg', 'compress-image', 'image-to-pdf'],
+    relatedTools: ['png-to-jpg', 'jpg-to-webp', 'compress-image', 'image-to-pdf', 'resize-image', 'crop-image'],
   },
 
   // 2. PNG to JPG
@@ -975,19 +1071,54 @@ export const TOOLS: ToolDefinition[] = [
     outputFormats: ['pdf'],
     engine: 'pdf-split',
     clientSide: true,
-    title: 'Split PDF Online – Extract Pages or Separate Into Individual Documents',
-    description: 'Split large PDF documents into smaller files or extract individual pages by range. Fast, private, and free.',
-    h1: 'Split PDF Pages',
-    intro: 'Extract selected pages from a large PDF document or divide a file into multiple smaller PDFs by custom page ranges.',
+    title: 'Split PDF Online – Extract Pages & Split PDF Files for Free',
+    description: 'Split PDF files into individual pages, extract selected pages, or separate documents by custom page ranges. Fast, secure, and 100% browser-based with zero file uploads.',
+    h1: 'Split PDF Files Online',
+    intro: 'Split PDF files into individual single-page documents, extract specific pages, or divide documents by custom page ranges. Fast, secure, and 100% browser-based with zero file uploads.',
     howTo: [
-      { title: 'Upload PDF', description: 'Select the PDF file you want to split.' },
-      { title: 'Specify ranges', description: 'Input page numbers or ranges (e.g., 1-3, 5, 8-10).' },
-      { title: 'Download separated PDFs', description: 'Retrieve your split document files.' },
+      { title: 'Upload your PDF file', description: 'Drag and drop or select your PDF document (up to 100 MB).' },
+      { title: 'Choose your split mode', description: 'Select Extract Selected Pages, Split Every Page, or Split by Ranges.' },
+      { title: 'Click Split PDF', description: 'Process and generate your separated PDF files locally in your browser.' },
+      { title: 'Download your split PDFs', description: 'Download individual PDF parts or download all generated documents in a single ZIP archive.' },
+    ],
+    features: [
+      { title: 'Extract Selected Pages', description: 'Select individual pages visually using interactive thumbnails to save each as a separate PDF.' },
+      { title: 'Split Every Page', description: 'Instantly divide the entire document into individual 1-page PDF files.' },
+      { title: 'Split by Custom Ranges', description: 'Specify custom page intervals (e.g. 1-3, 4-8, 9-12) to create multi-page PDF parts.' },
+      { title: '100% Lossless Vector Quality', description: 'Direct PDF page copying preserves sharp vector typography, embedded images, and original layout fidelity.' },
+      { title: 'Browser-Based Privacy', description: 'All splitting occurs entirely in your browser using Web Workers. Files are never uploaded to a remote server.' },
+      { title: 'ZIP & Single Downloads', description: 'Easily download individual PDF parts or grab all split files in a convenient ZIP archive.' },
     ],
     faq: [
-      { question: 'Can I split by custom page ranges?', answer: 'Yes, enter any combination of single pages or page ranges.' },
+      {
+        question: 'How do I extract specific pages from a PDF?',
+        answer: 'Select "Extract Selected Pages", click the page thumbnails you wish to extract (or use Select All / Clear All), and click Split PDF to generate individual documents for each selected page.',
+      },
+      {
+        question: 'Can I split a PDF into individual single pages?',
+        answer: 'Yes! Select the "Split Every Page" mode and click Split PDF. Every page in the document will be saved as its own standalone PDF file.',
+      },
+      {
+        question: 'How do custom page ranges work?',
+        answer: 'Select "Split by Ranges" and enter your desired intervals separated by commas (such as "1-3, 4-8, 9-12"). Each specified range will be exported as its own PDF document.',
+      },
+      {
+        question: 'Are my PDF files uploaded to a server?',
+        answer: 'No. All processing happens 100% client-side in your web browser. Your sensitive documents never leave your computer or device.',
+      },
+      {
+        question: 'Is Split PDF free to use?',
+        answer: 'Yes, this tool is completely free with no registration, no watermarks, and no hidden subscriptions.',
+      },
     ],
-    relatedTools: ['merge-pdf', 'delete-pdf-pages', 'reorder-pdf-pages'],
+    relatedTools: [
+      'merge-pdf',
+      'pdf-to-jpg',
+      'pdf-to-png',
+      'image-to-pdf',
+      'jpg-to-pdf',
+      'png-to-pdf',
+    ],
   },
 
   // 22. Compress PDF
@@ -999,19 +1130,118 @@ export const TOOLS: ToolDefinition[] = [
     outputFormats: ['pdf'],
     engine: 'pdf-compress',
     clientSide: true,
-    title: 'Compress PDF Online – Reduce PDF File Size Free',
-    description: 'Compress PDF documents to easily share via email or upload to portal limits while preserving readable text and diagrams.',
-    h1: 'Compress PDF Documents',
-    intro: 'Shrink oversized PDF files to meet email attachment limits and upload constraints while retaining clear readability.',
+    title: 'Compress PDF Online for Free – Reduce PDF File Size Privately',
+    description: 'Compress PDF files online for free directly in your browser. Reduce PDF file size with safe structural optimization, no file uploads, and no registration required.',
+    h1: 'Compress PDF Files Online for Free',
+    valueProposition: 'Reduce PDF file size directly in your web browser. 100% free, no registration required, and zero server uploads—safe structural stream optimization keeps your text and layouts crisp while trimming excess bytes.',
+    intro: 'Need to shrink a large PDF for an email attachment or portal submission? This free online PDF compressor optimizes internal PDF streams, removes duplicate indirect objects, and compresses metadata directly inside your browser. Unlike traditional online converters that upload your confidential PDFs to remote cloud servers, our tool runs 100% on your device. Your searchable text, vector lines, and page formatting remain perfectly intact with zero rasterization degradation.',
     howTo: [
-      { title: 'Upload PDF', description: 'Select the PDF document to compress.' },
-      { title: 'Choose compression level', description: 'Select recommended or high compression.' },
-      { title: 'Download smaller PDF', description: 'Save your optimized, lightweight PDF.' },
+      {
+        title: 'Select or drop your PDF document',
+        description: 'Click the upload zone or drag and drop a PDF file from your device. You can compress documents up to 100 MB in size.',
+      },
+      {
+        title: 'Click Compress PDF',
+        description: 'Click the "Compress PDF" button to initiate local optimization. The engine parses the PDF object graph and compresses data streams entirely in browser memory.',
+      },
+      {
+        title: 'Review the size comparison and download',
+        description: 'Compare the original and compressed file sizes with exact byte metrics and reduction percentages, then click "Download Compressed PDF" to save your optimized file.',
+      },
+    ],
+    features: [
+      {
+        title: '100% Client-Side Processing',
+        description: 'All document parsing, stream compression, and serialization happen locally in your web browser. Your sensitive files are never sent across the internet.',
+      },
+      {
+        title: 'Safe Structural Optimization',
+        description: 'Cleans redundant cross-reference tables, compacts indirect objects, and optimizes FlateDecode streams without altering document contents.',
+      },
+      {
+        title: 'Zero Rasterization Guarantee',
+        description: 'Your document pages are never converted into low-resolution raster images. Text remains selectable, searchable, and crystal-clear at any zoom level.',
+      },
+      {
+        title: 'Honest Size Comparison',
+        description: 'Transparent before-and-after byte measurement. If a file is already maximally compressed, the tool informs you and preserves your original file without corrupting it.',
+      },
+      {
+        title: '100 MB File Size Allowance',
+        description: 'Supports large documents, eBooks, legal filings, and scanned PDF reports up to 100 MB per file.',
+      },
+      {
+        title: 'Completely Free & No Account Needed',
+        description: 'No subscription plans, no watermarks, no registration, and no artificial daily limits.',
+      },
+    ],
+    privacyNote: {
+      title: 'Your Documents Stay Confidential and Secure',
+      description: 'PDFs often contain sensitive financial statements, legal contracts, resumes, or medical records. Because this tool runs entirely on the client side in your web browser, your documents are never uploaded to any cloud server or stored in a remote database.',
+      bullets: [
+        'Zero cloud uploads: Document bytes are processed strictly in your local device RAM.',
+        'No data collection or logging: We never read, index, or retain copies of your documents.',
+        'Automatic memory cleanup: Object URLs and allocated buffers are immediately revoked after processing.',
+      ],
+    },
+    useCases: [
+      {
+        title: 'Email Attachment Limits',
+        description: 'Shrink oversized PDF contracts, invoices, and reports to fit under email attachment caps (e.g., 20 MB or 25 MB on Gmail and Outlook) without bouncing.',
+      },
+      {
+        title: 'Job Applications & University Portals',
+        description: 'Meet strict upload size limits (such as 2 MB or 5 MB) required by government submission systems, university admission boards, and job recruiter portals.',
+      },
+      {
+        title: 'Digital Archiving & Storage Savings',
+        description: 'Optimize your personal or business PDF library to conserve local storage space on laptops, tablets, and cloud backup drives.',
+      },
+      {
+        title: 'Faster Web & Mobile Document Viewing',
+        description: 'Streamline heavy PDFs so clients and readers can open and view your documents quickly even on slow mobile internet connections.',
+      },
     ],
     faq: [
-      { question: 'Will compression make my PDF text blurry?', answer: 'No, text remains vector-based and sharp; compression targets embedded bitmap images and redundant metadata.' },
+      {
+        question: 'Is this PDF compressor free to use?',
+        answer: 'Yes, this tool is 100% free with no registration, subscriptions, watermarks, or hidden fees.',
+      },
+      {
+        question: 'Are my PDF files uploaded to your servers?',
+        answer: 'No. All compression operations run locally inside your web browser. Your confidential files never leave your computer or mobile device.',
+      },
+      {
+        question: 'Will compressing a PDF degrade text or image quality?',
+        answer: 'No. The compressor uses safe structural optimization and does not rasterize text or vector diagrams. Your text remains crisp, vector graphics stay sharp, and layouts are 100% preserved.',
+      },
+      {
+        question: 'Why was my PDF not reduced or only reduced by a small percentage?',
+        answer: 'Some PDFs (such as pre-optimized documents or PDFs containing already-compressed JPEG images) cannot be reduced further by structural stream compression. If the tool detects that the resulting file is not smaller, it safely notifies you and keeps your original document.',
+      },
+      {
+        question: 'What is the maximum PDF file size supported?',
+        answer: 'You can upload and compress PDF files up to 100 MB in size.',
+      },
+      {
+        question: 'Do I need to install any software or plugins?',
+        answer: 'No installation or browser extension is required. The tool operates directly in any standard modern web browser on desktop and mobile devices.',
+      },
+      {
+        question: 'Does this tool work on mobile phones and tablets?',
+        answer: 'Yes. The interface and compression engine are fully compatible with modern iOS Safari, Android Chrome, and other mobile web browsers.',
+      },
     ],
-    relatedTools: ['merge-pdf', 'split-pdf', 'compress-image'],
+    youMayAlsoNeed: ['merge-pdf', 'split-pdf', 'pdf-to-jpg'],
+    relatedTools: [
+      'merge-pdf',
+      'split-pdf',
+      'pdf-to-jpg',
+      'pdf-to-png',
+      'image-to-pdf',
+      'jpg-to-pdf',
+      'png-to-pdf',
+    ],
   },
 
   // 23. Rotate PDF
