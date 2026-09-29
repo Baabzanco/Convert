@@ -93,7 +93,7 @@ The application features 25 dedicated utilities spanning Image Conversion, Image
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/free-online-file-tools.git
+git clone https://github.com/baabzanco/convert.git
 cd free-online-file-tools
 
 # Install dependencies
