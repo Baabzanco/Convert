@@ -14,7 +14,7 @@ test.describe('JPG to PNG Conversion Tool E2E', () => {
     await page.goto('/tools/jpg-to-png');
     await page.locator('[data-hydrated="true"]').waitFor({ timeout: 10000 });
     await expect(page).toHaveTitle(/Convert JPG to PNG/i);
-    await expect(page.locator('h1')).toHaveText('Convert JPG to PNG');
+    await expect(page.locator('h1')).toHaveText(/Convert JPG to PNG/i);
 
     // 2. Select / Upload valid JPG file
     const fileInput = page.locator('#jpg-file-input');

@@ -127,9 +127,9 @@ export function SplitPdfController() {
   }, [mode, rangeInput, pdfDocInfo]);
 
   const handleFileSelected = useCallback(
-    async (incomingFile: File) => {
+    async (incomingFile: File, multiNotice?: string) => {
       resetAll();
-      setGlobalMessage(null);
+      setGlobalMessage(multiNotice ? { type: 'info', text: multiNotice } : null);
       setIsLoadingPdf(true);
 
       try {
@@ -212,25 +212,21 @@ export function SplitPdfController() {
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      if (e.dataTransfer.files.length > 1) {
-        setGlobalMessage({
-          type: 'info',
-          text: 'Split PDF works with one PDF at a time. Processing the first document.',
-        });
-      }
-      handleFileSelected(e.dataTransfer.files[0]);
+      const notice =
+        e.dataTransfer.files.length > 1
+          ? 'Split PDF works with one PDF at a time. Processing the first document.'
+          : undefined;
+      handleFileSelected(e.dataTransfer.files[0], notice);
     }
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      if (e.target.files.length > 1) {
-        setGlobalMessage({
-          type: 'info',
-          text: 'Split PDF works with one PDF at a time. Processing the first document.',
-        });
-      }
-      handleFileSelected(e.target.files[0]);
+      const notice =
+        e.target.files.length > 1
+          ? 'Split PDF works with one PDF at a time. Processing the first document.'
+          : undefined;
+      handleFileSelected(e.target.files[0], notice);
       e.target.value = '';
     }
   };
@@ -380,6 +376,7 @@ export function SplitPdfController() {
           <input
             id="split-pdf-file-input"
             type="file"
+            multiple
             ref={fileInputRef}
             onChange={handleFileInputChange}
             accept=".pdf,application/pdf"

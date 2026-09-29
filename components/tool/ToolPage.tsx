@@ -33,6 +33,9 @@ import { PdfToPngController } from './PdfToPngController';
 import { MergePdfController } from './MergePdfController';
 import { SplitPdfController } from './SplitPdfController';
 import { CompressPdfController } from './CompressPdfController';
+import { RotatePdfController } from './RotatePdfController';
+import { DeletePdfPagesController } from './DeletePdfPagesController';
+import { ReorderPdfPagesController } from './ReorderPdfPagesController';
 import {
   ShieldCheck,
   Zap,
@@ -193,6 +196,12 @@ export function ToolPage({ tool }: ToolPageProps) {
               <SplitPdfController />
             ) : tool.slug === 'compress-pdf' ? (
               <CompressPdfController />
+            ) : tool.slug === 'rotate-pdf' ? (
+              <RotatePdfController />
+            ) : tool.slug === 'delete-pdf-pages' ? (
+              <DeletePdfPagesController />
+            ) : tool.slug === 'reorder-pdf-pages' ? (
+              <ReorderPdfPagesController />
             ) : (
               <div className="bg-[#FFFFFF] border border-[#E5E7EB] rounded-card p-6 md:p-8 shadow-subtle mb-6">
                 <div className="max-w-2xl mx-auto space-y-6">

@@ -2,6 +2,9 @@ import { PDFDocument } from 'pdf-lib';
 import type { PdfWorkerRequest, PdfWorkerResponse } from './worker-types';
 import { calculatePageLayout } from '../image-to-pdf';
 import { hasJpegMagicBytes, hasPngMagicBytes } from '../../shared/validation';
+import { rotatePdfBytes, RotatePdfOptions } from '../rotate';
+import { deletePdfPagesBytes, DeletePdfPagesOptions } from '../delete-pages';
+import { reorderPdfPagesBytes, ReorderPdfPagesOptions } from '../reorder-pages';
 
 /**
  * Handles PDF worker message events.
@@ -323,6 +326,150 @@ export async function processPdfWorkerJob(
       });
     }
     return;
+  }
+
+  if (operation === 'rotate') {
+    try {
+      const fileItem = files[0];
+      if (!fileItem) {
+        throw new Error('No PDF file provided for rotation.');
+      }
+
+      const rotateOptions = options as RotatePdfOptions;
+      const { rotatedBytes, pageCount, resultFileName } = await rotatePdfBytes(
+        fileItem.data,
+        fileItem.name,
+        rotateOptions,
+        (progress) => {
+          postMessageFn({
+            id,
+            type: 'progress',
+            success: true,
+            stage: 'processing',
+            progress: progress.progress,
+            fileName: fileItem.name,
+          });
+        }
+      );
+
+      const safeBuffer = new Uint8Array(rotatedBytes).buffer;
+      postMessageFn({
+        id,
+        type: 'result',
+        success: true,
+        stage: 'completed',
+        progress: 100,
+        pageCount,
+        resultData: safeBuffer,
+        resultFileName,
+      });
+      return;
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'PDF rotation failed.';
+      postMessageFn({
+        id,
+        type: 'error',
+        success: false,
+        error: errorMsg,
+      });
+      return;
+    }
+  }
+
+  if (operation === 'delete-pages') {
+    try {
+      const fileItem = files[0];
+      if (!fileItem) {
+        throw new Error('No PDF file provided for page deletion.');
+      }
+
+      const deleteOptions = options as unknown as DeletePdfPagesOptions;
+      const { resultBytes, pageCount, resultFileName } = await deletePdfPagesBytes(
+        fileItem.data,
+        fileItem.name,
+        deleteOptions,
+        (progress) => {
+          postMessageFn({
+            id,
+            type: 'progress',
+            success: true,
+            stage: 'processing',
+            progress: progress.progress,
+            fileName: fileItem.name,
+          });
+        }
+      );
+
+      const safeBuffer = new Uint8Array(resultBytes).buffer;
+      postMessageFn({
+        id,
+        type: 'result',
+        success: true,
+        stage: 'completed',
+        progress: 100,
+        pageCount,
+        resultData: safeBuffer,
+        resultFileName,
+      });
+      return;
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Deleting PDF pages failed.';
+      postMessageFn({
+        id,
+        type: 'error',
+        success: false,
+        error: errorMsg,
+      });
+      return;
+    }
+  }
+
+  if (operation === 'reorder-pages') {
+    try {
+      const fileItem = files[0];
+      if (!fileItem) {
+        throw new Error('No PDF file provided for page reordering.');
+      }
+
+      const reorderOptions = options as unknown as ReorderPdfPagesOptions;
+      const { resultBytes, pageCount, resultFileName } = await reorderPdfPagesBytes(
+        fileItem.data,
+        fileItem.name,
+        reorderOptions,
+        (progress) => {
+          postMessageFn({
+            id,
+            type: 'progress',
+            success: true,
+            stage: 'processing',
+            progress: progress.progress,
+            fileName: fileItem.name,
+          });
+        }
+      );
+
+      const safeBuffer = new Uint8Array(resultBytes).buffer;
+      postMessageFn({
+        id,
+        type: 'result',
+        success: true,
+        stage: 'completed',
+        progress: 100,
+        pageCount,
+        resultData: safeBuffer,
+        resultFileName,
+      });
+      return;
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Reordering PDF pages failed.';
+      postMessageFn({
+        id,
+        type: 'error',
+        success: false,
+        error: errorMsg,
+      });
+      return;
+    }
   }
 
   postMessageFn({

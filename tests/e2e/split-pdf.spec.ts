@@ -113,9 +113,8 @@ test.describe('Tool #21: Split PDF E2E', () => {
     // Verify individual download button
     const singleDownloadPromise = page.waitForEvent('download');
     const firstDownloadBtn = page
-      .locator('div')
-      .filter({ hasText: /^sample-3pages-pages-1-2\.pdf/ })
-      .getByRole('button', { name: /Download/i });
+      .getByRole('button', { name: /^Download$/i })
+      .first();
     await firstDownloadBtn.click();
     const download = await singleDownloadPromise;
     expect(download.suggestedFilename()).toBe('sample-3pages-pages-1-2.pdf');
@@ -141,7 +140,7 @@ test.describe('Tool #21: Split PDF E2E', () => {
     const fileInput = page.locator('#split-pdf-file-input');
     await fileInput.setInputFiles(samplePngPath);
 
-    await expect(page.getByRole('alert')).toBeVisible();
+    await expect(page.locator('div[role="alert"]').filter({ hasText: /not a valid PDF/i })).toBeVisible();
     await expect(page.getByText(/not a valid PDF/i)).toBeVisible();
   });
 

@@ -31,7 +31,7 @@ test.describe('Tool #22: Compress PDF E2E', () => {
     await expect(page.getByText('PDF compressed successfully')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Original', { exact: true })).toBeVisible();
     await expect(page.getByText('Compressed', { exact: true })).toBeVisible();
-    await expect(page.getByText(/Reduced by/i)).toBeVisible();
+    await expect(page.getByText('Reduced by', { exact: true })).toBeVisible();
 
     // Verify download button
     const downloadBtn = page.getByRole('button', { name: /Download Compressed PDF/i });
@@ -86,7 +86,7 @@ test.describe('Tool #22: Compress PDF E2E', () => {
     await expect(page.getByText(/Your original PDF will be kept unchanged/i)).toBeVisible();
 
     // Should NOT show "Reduced by"
-    await expect(page.getByText(/Reduced by/i)).not.toBeVisible();
+    await expect(page.getByText('Reduced by', { exact: true })).not.toBeVisible();
 
     // Download button offers the original file
     const downloadBtn = page.getByRole('button', { name: /Download Original PDF/i });

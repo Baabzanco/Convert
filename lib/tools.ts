@@ -665,7 +665,43 @@ export const TOOLS: ToolDefinition[] = [
     relatedTools: ['crop-image', 'compress-image', 'rotate-image'],
   },
 
-
+  // 13. Crop Image
+  {
+    slug: 'crop-image',
+    name: 'Crop Image',
+    category: 'image-utility',
+    inputFormats: ['jpg', 'jpeg', 'png', 'webp'],
+    outputFormats: ['original', 'jpg', 'png', 'webp'],
+    engine: 'image-crop',
+    clientSide: true,
+    title: 'Crop Images Online – Free Visual Browser-Based Image Cropper',
+    description: 'Crop JPG, PNG, and WebP images online with free aspect ratio presets (Free, 1:1, 4:3, 16:9). Fast, secure, and 100% browser-based with no server uploads.',
+    h1: 'Crop Images Online',
+    intro: 'Crop your JPG, PNG, or WebP images visually right inside your web browser. Select exact aspect ratios including Free, 1:1, 4:3, and 16:9, adjust the crop area with precise pointer and touch controls, and download your cropped image instantly. All processing happens locally on your device with no server uploads and no registration required.',
+    howTo: [
+      { title: 'Upload your image', description: 'Drag and drop your JPG, PNG, or WebP image into the upload zone or click to browse.' },
+      { title: 'Select aspect ratio', description: 'Choose between Free, 1:1 (Square), 4:3, or 16:9 aspect ratio modes.' },
+      { title: 'Adjust crop area', description: 'Drag the crop box or use corner handles to select the exact region you want to keep.' },
+      { title: 'Click Crop Image', description: 'Process the crop locally in your browser to generate the cropped result.' },
+      { title: 'Download cropped image', description: 'Save your cropped image in its original format or choose JPG, PNG, or WebP output.' },
+    ],
+    features: [
+      { title: 'Visual Crop Editor', description: 'Interactive visual cropping with smooth pointer and touch support.' },
+      { title: 'Aspect Ratio Presets', description: 'Quickly switch between Free, 1:1, 4:3, and 16:9 aspect ratios.' },
+      { title: 'Source Pixel Precision', description: 'Crops directly from the original source image without downscaling the preview.' },
+      { title: 'Multiple Output Formats', description: 'Export your cropped result in Original format, JPG, PNG, or WebP.' },
+      { title: 'Quality Controls', description: 'Adjust JPG and WebP compression quality presets (High, Medium, Low).' },
+      { title: 'Browser-Based & Private', description: 'Processing runs locally in your browser. Files are never uploaded to a server.' },
+    ],
+    faq: [
+      { question: 'How do I crop an image?', answer: 'Upload your image, choose an aspect ratio or Free mode, adjust the crop area using the visual handles, and click Crop Image.' },
+      { question: 'Which image formats are supported?', answer: 'We support JPG, JPEG, PNG, and static WebP files up to 50 MB.' },
+      { question: 'Can I crop to 1:1, 4:3, or 16:9?', answer: 'Yes! You can choose between Free aspect ratio or locked 1:1, 4:3, and 16:9 proportions.' },
+      { question: 'Will cropping change the image dimensions?', answer: 'Yes, the output dimensions will exactly equal the selected crop rectangle in source pixels.' },
+      { question: 'Are my images uploaded to a server?', answer: 'No. All cropping is performed locally in your browser using client-side Web Workers and Canvas APIs.' },
+    ],
+    relatedTools: ['resize-image', 'compress-image', 'jpg-to-png', 'png-to-jpg'],
+  },
 
   // 14. Rotate Image
   {
@@ -1253,19 +1289,117 @@ export const TOOLS: ToolDefinition[] = [
     outputFormats: ['pdf'],
     engine: 'pdf-rotate',
     clientSide: true,
-    title: 'Rotate PDF Pages Online – Permanently Fix PDF Orientation',
-    description: 'Rotate individual PDF pages or all pages 90, 180, or 270 degrees clockwise. Save corrected documents permanently.',
-    h1: 'Rotate PDF Pages',
-    intro: 'Fix upside-down or sideways pages in scanned documents. Rotate single pages or the entire document permanently in seconds.',
+    title: 'Rotate PDF Pages Online for Free – Permanently Fix PDF Orientation',
+    description: 'Rotate individual PDF pages or all pages 90, 180, or 270 degrees clockwise directly in your browser. 100% free, fast client-side rotation, zero file uploads, and no registration required.',
+    h1: 'Rotate PDF Pages Online for Free',
+    valueProposition: 'Rotate all pages or specific pages by 90°, 180°, or 270° clockwise directly in your web browser. 100% free, no registration required, zero server uploads, and no loss of text or vector quality.',
+    intro: 'Need to fix upside-down or sideways pages in a PDF document? This free online PDF rotation tool lets you rotate all pages or only selected pages by 90, 180, or 270 degrees clockwise. Everything runs 100% client-side inside your browser—your documents are never uploaded to remote servers. All text, vector typography, and image fidelity are perfectly preserved without rasterization.',
     howTo: [
-      { title: 'Upload PDF', description: 'Choose your PDF file.' },
-      { title: 'Select pages to rotate', description: 'Rotate all pages or click individual thumbnails.' },
-      { title: 'Save rotated PDF', description: 'Download your permanently oriented document.' },
+      {
+        title: 'Upload your PDF document',
+        description: 'Click the upload zone or drag and drop a PDF file from your device (up to 100 MB).',
+      },
+      {
+        title: 'Select pages and rotation angle',
+        description: 'Choose "Rotate All Pages" or click thumbnails to select specific pages, then pick 90°, 180°, or 270° clockwise.',
+      },
+      {
+        title: 'Rotate and download',
+        description: 'Click "Rotate PDF" to apply rotation metadata in your browser memory. Save your corrected PDF immediately.',
+      },
+    ],
+    features: [
+      {
+        title: '100% Client-Side Processing',
+        description: 'Rotations execute locally in your web browser using Web Workers. Your files are never sent across the internet.',
+      },
+      {
+        title: 'Selective Page Rotation',
+        description: 'Rotate all pages simultaneously or choose only specific individual pages that need orientation correction.',
+      },
+      {
+        title: '90°, 180°, & 270° Clockwise Angles',
+        description: 'Quickly correct sideways scans or completely upside-down pages with standard clockwise rotation angles.',
+      },
+      {
+        title: 'Zero Rasterization Guarantee',
+        description: 'Modifies only PDF page rotation metadata. Searchable text, vector diagrams, fonts, and images remain 100% sharp.',
+      },
+      {
+        title: 'Visual Page Thumbnails',
+        description: 'Interactive grid previews generated in your browser so you can visually verify which pages need rotation.',
+      },
+      {
+        title: '100 MB File Size Allowance',
+        description: 'Supports large documents, eBooks, legal filings, and scanned PDF reports up to 100 MB per file.',
+      },
+    ],
+    privacyNote: {
+      title: 'Your Documents Stay Completely Confidential',
+      description: 'Legal filings, contracts, and personal documents never leave your computer. Processing occurs strictly in your web browser memory with zero cloud uploads.',
+      bullets: [
+        'Zero server uploads: File data is read and modified in local memory.',
+        'No logging or storage: We never inspect, transmit, or retain copies of your documents.',
+        'Instant memory cleanup: Temporary object URLs and memory buffers are safely revoked.',
+      ],
+    },
+    useCases: [
+      {
+        title: 'Fixing Scanned Document Orientation',
+        description: 'Correct pages that were fed sideways or upside-down during multi-page scanner and feeder runs.',
+      },
+      {
+        title: 'Mixing Portrait & Landscape Sheets',
+        description: 'Properly align landscape spreadsheets, wide charts, and presentation slides mixed inside portrait PDF reports.',
+      },
+      {
+        title: 'Correcting Upside-Down Forms & Contracts',
+        description: 'Rotate mobile photo scans or camera uploads that lacked correct orientation metadata when saved.',
+      },
+      {
+        title: 'Preparing Documents for Print & Sharing',
+        description: 'Ensure colleagues and clients can view your PDF without manually rotating pages in their desktop viewers.',
+      },
     ],
     faq: [
-      { question: 'Does rotating modify the original PDF text?', answer: 'No, the document content remains intact; only the page display angle coordinate is updated.' },
+      {
+        question: 'Can I rotate only specific pages in a PDF?',
+        answer: 'Yes. Switch to "Rotate Selected Pages" and click on the specific thumbnails you want to rotate. Only the highlighted pages will be rotated; unselected pages will remain untouched.',
+      },
+      {
+        question: 'Can I rotate all pages at once?',
+        answer: 'Yes. Choose "Rotate All Pages" to apply your chosen rotation angle (90°, 180°, or 270° clockwise) to every page in the document simultaneously.',
+      },
+      {
+        question: 'Which rotation angles are supported?',
+        answer: 'You can rotate pages by 90° clockwise, 180° (upside-down flip), or 270° clockwise (equivalent to 90° counter-clockwise).',
+      },
+      {
+        question: 'Will rotating a PDF reduce quality or rasterize text?',
+        answer: 'No. The rotation is performed purely on the PDF page transformation matrix and metadata using pdf-lib. No rasterization occurs, and all text, fonts, vector paths, and high-resolution images are preserved at 100% quality.',
+      },
+      {
+        question: 'Are my PDF files uploaded to your servers?',
+        answer: 'No. All processing happens entirely within your web browser using client-side JavaScript. Your confidential files never leave your device.',
+      },
+      {
+        question: 'What is the maximum PDF file size supported?',
+        answer: 'You can upload and rotate PDF documents up to 100 MB in size.',
+      },
+      {
+        question: 'Does this tool work on mobile devices?',
+        answer: 'Yes. The interface is fully responsive, touch-friendly, and works directly in modern mobile web browsers on iOS and Android.',
+      },
     ],
-    relatedTools: ['reorder-pdf-pages', 'delete-pdf-pages', 'merge-pdf'],
+    youMayAlsoNeed: ['compress-pdf', 'merge-pdf', 'split-pdf'],
+    relatedTools: [
+      'compress-pdf',
+      'merge-pdf',
+      'split-pdf',
+      'pdf-to-jpg',
+      'pdf-to-png',
+      'image-to-pdf',
+    ],
   },
 
   // 24. Delete PDF Pages
@@ -1277,19 +1411,117 @@ export const TOOLS: ToolDefinition[] = [
     outputFormats: ['pdf'],
     engine: 'pdf-delete-pages',
     clientSide: true,
-    title: 'Delete PDF Pages Online – Remove Unwanted Pages from PDF',
-    description: 'Select and remove blank or unwanted pages from your PDF file. Download a clean, trimmed document instantly.',
-    h1: 'Delete Pages from PDF',
-    intro: 'Quickly strip out unnecessary covers, blank pages, or outdated sections from any PDF document without re-scanning.',
+    title: 'Delete PDF Pages Online for Free – Remove Unwanted Pages',
+    description: 'Select and remove unwanted, blank, or duplicate pages from any PDF file directly in your browser. 100% free, private client-side processing, and zero server uploads.',
+    h1: 'Delete Pages from PDF Online for Free',
+    valueProposition: 'Select and permanently remove unwanted, blank, or duplicate pages from your PDF directly in your browser. 100% free, zero server uploads, and no quality loss.',
+    intro: 'Need to remove unwanted, blank, or sensitive pages from a PDF document? Our free client-side PDF page deleter lets you preview page thumbnails, select exactly the pages you want to remove, and download a clean, trimmed PDF instantly. Processing happens 100% within your browser, ensuring complete privacy with zero file uploads to external servers.',
     howTo: [
-      { title: 'Upload PDF', description: 'Upload the document you want to trim.' },
-      { title: 'Select pages to remove', description: 'Click pages to mark them for removal or enter page numbers.' },
-      { title: 'Download trimmed PDF', description: 'Save your cleaned-up PDF file.' },
+      {
+        title: 'Upload your PDF document',
+        description: 'Choose or drag and drop your PDF file (up to 100 MB).',
+      },
+      {
+        title: 'Select pages to delete',
+        description: 'Click on the page thumbnails you wish to remove. Marked pages will be clearly highlighted.',
+      },
+      {
+        title: 'Delete and download',
+        description: 'Click "Delete Pages" to create your trimmed PDF in browser memory. Save your cleaned document immediately.',
+      },
+    ],
+    features: [
+      {
+        title: '100% Client-Side Deletion',
+        description: 'Page extraction and cleanup occur in local browser memory. Your confidential documents are never uploaded to the cloud.',
+      },
+      {
+        title: 'Visual Page Thumbnails',
+        description: 'Interactive page preview grid lets you visually inspect and verify pages before removing them.',
+      },
+      {
+        title: 'Zero Rasterization Guarantee',
+        description: 'Non-selected pages are copied directly into the new PDF structure. Text searchability, fonts, and vector graphics stay crisp.',
+      },
+      {
+        title: 'Zero-Page Output Protection',
+        description: 'Built-in safety checks ensure at least one page remains in the document, preventing corrupt zero-page files.',
+      },
+      {
+        title: 'Selective or Bulk Removal',
+        description: 'Select individual non-contiguous pages, or use "Select All" and deselect the specific pages you wish to keep.',
+      },
+      {
+        title: '100 MB File Size Support',
+        description: 'Comfortably handles large documents, scanned books, financial reports, and legal filings up to 100 MB.',
+      },
+    ],
+    privacyNote: {
+      title: 'Your Documents Stay Completely Confidential',
+      description: 'Legal filings, contracts, and personal records never leave your device. All PDF operations run locally in browser memory.',
+      bullets: [
+        'Zero server uploads: Files are loaded and modified in local memory.',
+        'No logging or transmission: We never view, transfer, or store your documents.',
+        'Instant memory cleanup: Temporary memory references and object URLs are safely released.',
+      ],
+    },
+    useCases: [
+      {
+        title: 'Removing Blank Scanner Pages',
+        description: 'Quickly strip out accidental blank backsides and placeholder sheets produced by automatic document feeders.',
+      },
+      {
+        title: 'Redacting Confidential Appendices',
+        description: 'Delete private appendix pages, internal balance sheets, or signature sheets before sharing a document externally.',
+      },
+      {
+        title: 'Trimming E-Books & Reports',
+        description: 'Extract and keep only the relevant chapters or articles while discarding unnecessary cover pages and indexes.',
+      },
+      {
+        title: 'Fixing Duplicate Page Scans',
+        description: 'Eliminate duplicated or misfed sheets from scanned contracts without re-scanning the entire stack.',
+      },
     ],
     faq: [
-      { question: 'Can I remove multiple pages at once?', answer: 'Yes, select as many pages as you like across the document.' },
+      {
+        question: 'Can I delete a single page from a PDF?',
+        answer: 'Yes. Simply click the thumbnail of the page you want to delete and click the delete button. Your downloaded PDF will contain all pages except the one you removed.',
+      },
+      {
+        question: 'Can I delete multiple PDF pages at once?',
+        answer: 'Yes. You can select any number of contiguous or non-contiguous pages across the document. You can also click "Select All" and then uncheck the pages you want to keep.',
+      },
+      {
+        question: 'Can I preview pages before deleting them?',
+        answer: 'Yes. High-fidelity thumbnails are rendered for each page of your PDF so you can visually verify its contents before confirming deletion.',
+      },
+      {
+        question: 'Can I delete all pages from a PDF?',
+        answer: 'No. A valid PDF file must contain at least one readable page. The tool enforces this safety rule and prevents deleting all pages or deleting the only page of a single-page document.',
+      },
+      {
+        question: 'Does deleting pages reduce PDF quality or rasterize text?',
+        answer: 'No. The remaining pages are copied directly into the new PDF structure using pdf-lib without re-encoding or rasterizing. Text remains searchable and vector graphics remain sharp.',
+      },
+      {
+        question: 'Is my PDF uploaded to a server?',
+        answer: 'No. Everything runs 100% locally in your web browser. Your document is never sent over the internet or stored on remote servers.',
+      },
+      {
+        question: 'What is the maximum PDF file size supported?',
+        answer: 'The tool supports PDF files up to 100 MB in size.',
+      },
     ],
-    relatedTools: ['split-pdf', 'reorder-pdf-pages', 'rotate-pdf'],
+    youMayAlsoNeed: ['split-pdf', 'rotate-pdf', 'compress-pdf'],
+    relatedTools: [
+      'split-pdf',
+      'rotate-pdf',
+      'compress-pdf',
+      'merge-pdf',
+      'pdf-to-jpg',
+      'pdf-to-png',
+    ],
   },
 
   // 25. Reorder PDF Pages
@@ -1301,59 +1533,119 @@ export const TOOLS: ToolDefinition[] = [
     outputFormats: ['pdf'],
     engine: 'pdf-reorder-pages',
     clientSide: true,
-    title: 'Reorder PDF Pages Online – Rearrange Pages with Drag & Drop',
-    description: 'Rearrange page order in any PDF file using visual drag and drop thumbnails. Reorganize your document in seconds.',
-    h1: 'Reorder PDF Pages',
-    intro: 'Organize your document pages in the exact sequence you want. Simply drag and drop page thumbnails into the correct order.',
+    title: 'Reorder PDF Pages Online for Free – Rearrange Pages with Drag & Drop',
+    description: 'Rearrange and reorder pages in any PDF file using interactive drag-and-drop thumbnails or accessible move buttons. 100% free, private browser-based processing, and zero server uploads.',
+    h1: 'Reorder PDF Pages Online for Free',
+    valueProposition: 'Rearrange and reorder PDF pages visually with drag & drop or accessible arrow buttons. 100% free, client-side processing, and zero server uploads.',
+    intro: 'Need to organize or re-sequence pages in a PDF document? Our free client-side PDF page reorder tool lets you visually rearrange pages via smooth drag-and-drop or accessible Up/Down buttons. Preview real page thumbnails, adjust sequence effortlessly, and download your reorganized PDF instantly. Processing is 100% private and runs entirely in your browser with zero cloud file uploads.',
     howTo: [
-      { title: 'Upload PDF', description: 'Open your document in the reorder tool.' },
-      { title: 'Drag to reorder', description: 'Rearrange page thumbnails visually into your desired sequence.' },
-      { title: 'Save new document', description: 'Download your restructured PDF file.' },
-    ],
-    faq: [
-      { question: 'Can I also rotate or remove pages while reordering?', answer: 'Yes, our visual page manager lets you rotate, delete, and reorder simultaneously.' },
-    ],
-    relatedTools: ['delete-pdf-pages', 'rotate-pdf', 'merge-pdf'],
-  },
-
-  // 13. Crop Image
-  {
-    slug: 'crop-image',
-    name: 'Crop Image',
-    category: 'image-utility',
-    inputFormats: ['jpg', 'jpeg', 'png', 'webp'],
-    outputFormats: ['original', 'jpg', 'png', 'webp'],
-    engine: 'image-crop',
-    clientSide: true,
-    title: 'Crop Images Online – Free Visual Browser-Based Image Cropper',
-    description: 'Crop JPG, PNG, and WebP images online with free aspect ratio presets (Free, 1:1, 4:3, 16:9). Fast, secure, and 100% browser-based with no server uploads.',
-    h1: 'Crop Images Online',
-    intro: 'Crop your JPG, PNG, or WebP images visually right inside your web browser. Select exact aspect ratios including Free, 1:1, 4:3, and 16:9, adjust the crop area with precise pointer and touch controls, and download your cropped image instantly. All processing happens locally on your device with no server uploads and no registration required.',
-    howTo: [
-      { title: 'Upload your image', description: 'Drag and drop your JPG, PNG, or WebP image into the upload zone or click to browse.' },
-      { title: 'Select aspect ratio', description: 'Choose between Free, 1:1 (Square), 4:3, or 16:9 aspect ratio modes.' },
-      { title: 'Adjust crop area', description: 'Drag the crop box or use corner handles to select the exact region you want to keep.' },
-      { title: 'Click Crop Image', description: 'Process the crop locally in your browser to generate the cropped result.' },
-      { title: 'Download cropped image', description: 'Save your cropped image in its original format or choose JPG, PNG, or WebP output.' },
+      {
+        title: 'Upload your PDF document',
+        description: 'Choose or drag and drop your PDF file (up to 100 MB).',
+      },
+      {
+        title: 'Rearrange page order',
+        description: 'Drag page thumbnails into your desired sequence or use the Move Up and Move Down buttons on each card.',
+      },
+      {
+        title: 'Apply and download',
+        description: 'Click "Apply New Page Order" to create your reordered document in browser memory and download it instantly.',
+      },
     ],
     features: [
-      { title: 'Visual Crop Editor', description: 'Interactive visual cropping with smooth pointer and touch support.' },
-      { title: 'Aspect Ratio Presets', description: 'Quickly switch between Free, 1:1, 4:3, and 16:9 aspect ratios.' },
-      { title: 'Source Pixel Precision', description: 'Crops directly from the original source image without downscaling the preview.' },
-      { title: 'Multiple Output Formats', description: 'Export your cropped result in Original format, JPG, PNG, or WebP.' },
-      { title: 'Quality Controls', description: 'Adjust JPG and WebP compression quality presets (High, Medium, Low).' },
-      { title: 'Browser-Based & Private', description: 'Processing runs locally in your browser. Files are never uploaded to a server.' },
+      {
+        title: '100% Client-Side Reordering',
+        description: 'All document restructuring occurs in local browser memory using pdf-lib. Your confidential files are never uploaded to the cloud.',
+      },
+      {
+        title: 'Visual Drag & Drop Interface',
+        description: 'Reorganize page order naturally with responsive desktop drag-and-drop thumbnail cards.',
+      },
+      {
+        title: 'Accessible Up & Down Controls',
+        description: 'Full keyboard navigation and dedicated Move Up/Move Down buttons ensure seamless reordering on mobile and touch devices.',
+      },
+      {
+        title: 'Zero Rasterization Guarantee',
+        description: 'Pages are copied directly with all vectors, embedded fonts, text searchability, dimensions, and image quality 100% intact.',
+      },
+      {
+        title: 'Instant Reset Order',
+        description: 'Easily revert back to the original page sequence with a single click without re-uploading.',
+      },
+      {
+        title: '100 MB File Size Support',
+        description: 'Handles lengthy documents, scanned books, financial statements, and slide decks up to 100 MB.',
+      },
+    ],
+    privacyNote: {
+      title: 'Your Documents Stay Completely Private',
+      description: 'Contracts, statements, and sensitive materials never leave your computer or phone. All page manipulation occurs entirely in browser memory.',
+      bullets: [
+        'Zero server uploads: PDF bytes are loaded and rearranged locally in your browser session.',
+        'No logging or transmission: We never inspect, store, or transmit your document contents.',
+        'Immediate resource cleanup: Temporary object URLs and memory buffers are safely discarded.',
+      ],
+    },
+    useCases: [
+      {
+        title: 'Re-sequencing Out-of-Order Scans',
+        description: 'Correct backward, inverted, or shuffled page scans produced by duplex feeders or manual flatbed scanners.',
+      },
+      {
+        title: 'Reorganizing Presentations & Reports',
+        description: 'Move an executive summary, conclusion, or title slide to the beginning or end of your document.',
+      },
+      {
+        title: 'Structuring Assembled Dossiers',
+        description: 'Arrange mixed attachments, case exhibits, and invoices into the exact logical order required by clients or court filings.',
+      },
+      {
+        title: 'Fixing Mixed Document Exports',
+        description: 'Fix exported report sections that were compiled in reverse or alphabetical order by internal databases.',
+      },
     ],
     faq: [
-      { question: 'How do I crop an image?', answer: 'Upload your image, choose an aspect ratio or Free mode, adjust the crop area using the visual handles, and click Crop Image.' },
-      { question: 'Which image formats are supported?', answer: 'We support JPG, JPEG, PNG, and static WebP files up to 50 MB.' },
-      { question: 'Can I crop to 1:1, 4:3, or 16:9?', answer: 'Yes! You can choose between Free aspect ratio or locked 1:1, 4:3, and 16:9 proportions.' },
-      { question: 'Will cropping change the image dimensions?', answer: 'Yes, the output dimensions will exactly equal the selected crop rectangle in source pixels.' },
-      { question: 'Are my images uploaded to a server?', answer: 'No. All cropping is performed locally in your browser using client-side Web Workers and Canvas APIs.' },
+      {
+        question: 'Can I rearrange PDF pages using drag and drop?',
+        answer: 'Yes. On desktop devices, simply drag any page thumbnail and drop it into its new position. The list updates smoothly in real time.',
+      },
+      {
+        question: 'Can I move a page to the beginning or end of a PDF?',
+        answer: 'Yes. You can drag any page to the very first or last position, or click the Move Up/Move Down buttons until it reaches the desired location.',
+      },
+      {
+        question: 'Can I reorder pages on mobile devices without drag and drop?',
+        answer: 'Yes. Every page thumbnail card features dedicated "Up" and "Down" buttons designed for quick, comfortable touch interaction on phones and tablets.',
+      },
+      {
+        question: 'Does reordering pages reduce PDF quality or compress images?',
+        answer: 'No. The pages are re-sequenced at the PDF object level without rasterization or re-encoding. All fonts, vector paths, selectable text, and image resolutions remain perfectly preserved.',
+      },
+      {
+        question: 'Can I restore the original page order if I make a mistake?',
+        answer: 'Yes. Click the "Reset Order" button at any time to instantly restore the original sequence without needing to re-upload your file.',
+      },
+      {
+        question: 'Is my PDF uploaded to a server?',
+        answer: 'No. All processing happens 100% locally in your web browser. Your document never touches external servers or cloud storage.',
+      },
+      {
+        question: 'What is the maximum PDF file size supported?',
+        answer: 'The tool supports PDF files up to 100 MB in size.',
+      },
     ],
-    relatedTools: ['resize-image', 'compress-image', 'jpg-to-png', 'png-to-jpg'],
+    youMayAlsoNeed: ['delete-pdf-pages', 'rotate-pdf', 'merge-pdf', 'split-pdf'],
+    relatedTools: [
+      'delete-pdf-pages',
+      'rotate-pdf',
+      'merge-pdf',
+      'split-pdf',
+      'compress-pdf',
+      'pdf-to-jpg',
+      'pdf-to-png',
+    ],
   },
-
 ];
 
 export function getToolBySlug(slug: string): ToolDefinition | undefined {

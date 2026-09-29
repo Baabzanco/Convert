@@ -52,6 +52,27 @@ export const COMPRESS_PDF_LIMITS = {
   ALLOWED_MIMES: ['application/pdf', 'application/x-pdf'],
 };
 
+export const ROTATE_PDF_LIMITS = {
+  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100 MB
+  MAX_FILES: 1,
+  ALLOWED_EXTENSIONS: ['pdf'],
+  ALLOWED_MIMES: ['application/pdf', 'application/x-pdf'],
+};
+
+export const DELETE_PDF_PAGES_LIMITS = {
+  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100 MB
+  MAX_FILES: 1,
+  ALLOWED_EXTENSIONS: ['pdf'],
+  ALLOWED_MIMES: ['application/pdf', 'application/x-pdf'],
+};
+
+export const REORDER_PDF_PAGES_LIMITS = {
+  MAX_FILE_SIZE: 100 * 1024 * 1024, // 100 MB
+  MAX_FILES: 1,
+  ALLOWED_EXTENSIONS: ['pdf'],
+  ALLOWED_MIMES: ['application/pdf', 'application/x-pdf'],
+};
+
 export const IMAGE_TO_PDF_LIMITS = {
   MAX_FILE_SIZE: 50 * 1024 * 1024, // 50 MB
   MAX_BATCH_FILES: 20,
@@ -630,6 +651,24 @@ export async function validateSplitPdfFile(
 }
 
 export async function validateCompressPdfFile(
+  file: File
+): Promise<{ valid: boolean; error?: ToolError }> {
+  return validatePdfToJpgFile(file);
+}
+
+export async function validateRotatePdfFile(
+  file: File
+): Promise<{ valid: boolean; error?: ToolError }> {
+  return validatePdfToJpgFile(file);
+}
+
+export async function validateDeletePdfPagesFile(
+  file: File
+): Promise<{ valid: boolean; error?: ToolError }> {
+  return validatePdfToJpgFile(file);
+}
+
+export async function validateReorderPdfPagesFile(
   file: File
 ): Promise<{ valid: boolean; error?: ToolError }> {
   return validatePdfToJpgFile(file);
