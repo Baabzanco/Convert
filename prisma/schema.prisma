@@ -1,0 +1,175 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  CONTENT_MANAGER
+  EDITOR
+  VIEWER
+}
+
+enum PageStatus {
+  DRAFT
+  PUBLISHED
+}
+
+model AdminUser {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  name         String
+  role         Role           @default(EDITOR)
+  isActive     Boolean        @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  auditLogs    AuditLog[]
+  revisions    PageRevision[]
+
+  @@map("admin_users")
+}
+
+model Page {
+  id          String         @id @default(cuid())
+  slug        String         @unique
+  name        String
+  status      PageStatus     @default(DRAFT)
+  publishedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  content     PageContent?
+  seo         PageSeo?
+  revisions   PageRevision[]
+
+  @@map("pages")
+}
+
+model PageContent {
+  id          String   @id @default(cuid())
+  pageId      String   @unique
+  page        Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  version     Int      @default(1)
+  isPublished Boolean  @default(false)
+  blocks      Json     @default("[]")
+  customCss   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("page_contents")
+}
+
+model PageSeo {
+  id                 String   @id @default(cuid())
+  pageId             String   @unique
+  page               Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  seoTitle           String?
+  metaDescription    String?
+  canonicalUrl       String?
+  robotsIndex        Boolean  @default(true)
+  robotsFollow       Boolean  @default(true)
+  ogTitle            String?
+  ogDescription      String?
+  ogImage            String?
+  twitterTitle       String?
+  twitterDescription String?
+  twitterImage       String?
+  schemaType         String?
+  schemaJson         Json?
+  focusKeyword       String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("page_seo")
+}
+
+model ToolContent {
+  id              String   @id @default(cuid())
+  toolSlug        String   @unique
+  customTitle     String?
+  customH1        String?
+  customDescription String?
+  customIntro     String?
+  customValueProp String?
+  customHowTo     Json?
+  customFeatures  Json?
+  customFaq       Json?
+  isPublished     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  seo             ToolSeo?
+
+  @@map("tool_contents")
+}
+
+model ToolSeo {
+  id                 String      @id @default(cuid())
+  toolContentId      String      @unique
+  toolContent        ToolContent @relation(fields: [toolContentId], references: [id], onDelete: Cascade)
+  seoTitle           String?
+  metaDescription    String?
+  canonicalUrl       String?
+  robotsIndex        Boolean     @default(true)
+  robotsFollow       Boolean     @default(true)
+  ogTitle            String?
+  ogDescription      String?
+  ogImage            String?
+  schemaType         String?
+  schemaJson         Json?
+  focusKeyword       String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  @@map("tool_seo")
+}
+
+model PageRevision {
+  id              String     @id @default(cuid())
+  pageId          String
+  page            Page       @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  contentSnapshot Json
+  seoSnapshot     Json?
+  authorId        String?
+  author          AdminUser? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  reason          String?
+  createdAt       DateTime   @default(now())
+
+  @@map("page_revisions")
+}
+
+model AuditLog {
+  id         String     @id @default(cuid())
+  userId     String?
+  user       AdminUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime   @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model GlobalSettings {
+  id                     String   @id @default("default")
+  siteName               String   @default("Free Online File Tools")
+  siteUrl                String   @default("https://example.com")
+  defaultSeoTitle        String?
+  defaultMetaDescription String?
+  defaultOgImage         String?
+  defaultTwitterImage    String?
+  googleAnalyticsId      String?
+  googleAdSenseId        String?
+  socialLinks            Json?
+  updatedAt              DateTime @updatedAt
+
+  @@map("global_settings")
+}
