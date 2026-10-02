@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { getDb, isPrismaHealthy } from '@/lib/db';
 import { getAllTools } from '@/lib/tools';
 import { DashboardStats } from '../types';
 import { getAuditLogs } from './audit.service';
@@ -23,10 +23,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     getAuditLogs({ limit: 6 }),
   ]);
 
-  const databaseStatus =
-    process.env.DATABASE_URL && !process.env.USE_MEMORY_DB
-      ? 'connected'
-      : 'fallback_memory';
+  const databaseStatus = isPrismaHealthy() ? 'connected' : 'fallback_memory';
 
   return {
     totalAdminUsers,

@@ -3,17 +3,15 @@ import { notFound } from 'next/navigation';
 import { getAllTools, getToolBySlug } from '@/lib/tools';
 import ToolPage from '@/components/tool/ToolPage';
 import { siteConfig } from '@/lib/seo';
+import { getPublishedTool, buildToolMetadata, getToolJsonLd } from '@/lib/cms/tool-resolver';
+import JsonLd from '@/components/seo/JsonLd';
 
 interface ToolRouteProps {
   params: Promise<{ slug: string }>;
 }
 
-export async function generateStaticParams() {
-  const tools = getAllTools();
-  return tools.map((tool) => ({
-    slug: tool.slug,
-  }));
-}
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 export async function generateMetadata({ params }: ToolRouteProps): Promise<Metadata> {
   const { slug } = await params;
@@ -28,7 +26,7 @@ export async function generateMetadata({ params }: ToolRouteProps): Promise<Meta
 
   const canonicalUrl = `${siteConfig.url}/tools/${tool.slug}`;
 
-  return {
+  const defaultMeta: Metadata = {
     title: tool.title,
     description: tool.description,
     alternates: {
@@ -47,16 +45,24 @@ export async function generateMetadata({ params }: ToolRouteProps): Promise<Meta
       description: tool.description,
     },
   };
+
+  return buildToolMetadata(slug, defaultMeta);
 }
 
 export default async function DynamicToolPage({ params }: ToolRouteProps) {
   const { slug } = await params;
-  const tool = getToolBySlug(slug);
+  const tool = await getPublishedTool(slug);
 
   if (!tool) {
     notFound();
   }
 
-  return <ToolPage tool={tool} />;
-}
+  const jsonLd = await getToolJsonLd(slug);
 
+  return (
+    <>
+      {jsonLd && <JsonLd data={jsonLd} />}
+      <ToolPage tool={tool} />
+    </>
+  );
+}

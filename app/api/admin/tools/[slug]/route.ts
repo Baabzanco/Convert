@@ -13,7 +13,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   const { slug } = await params;
   const data = await getToolContentBySlug(slug);
   if (!data) {
-    return NextResponse.json({ error: 'Tool not found in registry' }, { status: 404 });
+    return NextResponse.json({ error: `Tool '${slug}' not found in canonical registry.` }, { status: 404 });
   }
 
   return NextResponse.json(data);
@@ -27,7 +27,7 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   try {
     const body = await req.json();
     const updated = await upsertToolContent(slug, body, auth.user);
-    return NextResponse.json({ toolContent: updated });
+    return NextResponse.json({ toolContent: updated, success: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed to update tool content.';
     return NextResponse.json({ error: msg }, { status: 400 });

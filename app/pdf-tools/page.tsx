@@ -5,24 +5,32 @@ import Breadcrumbs from '@/components/seo/Breadcrumbs';
 import ToolCard from '@/components/tool/ToolCard';
 import AdSlot from '@/components/ads/AdSlot';
 import { getToolsByCategory } from '@/lib/tools';
+import { getPublishedPage, buildCmsMetadata, CmsJsonLd } from '@/lib/cms/page-resolver';
 
-export const metadata: Metadata = {
+const DEFAULT_METADATA: Metadata = {
   title: 'Free Online PDF Tools – Merge, Split, Compress & Convert',
   description: 'Free browser-based PDF utilities. Merge PDF documents, split pages, compress file sizes, rotate orientation, delete, reorder, and convert to images safely.',
 };
 
-export default function PdfToolsPage() {
+export async function generateMetadata(): Promise<Metadata> {
+  const cmsPage = await getPublishedPage('pdf-tools');
+  return buildCmsMetadata(cmsPage, DEFAULT_METADATA);
+}
+
+export default async function PdfToolsPage() {
+  const cmsPage = await getPublishedPage('pdf-tools');
   const converters = getToolsByCategory('pdf-converter');
   const utilities = getToolsByCategory('pdf-utility');
 
   return (
     <div className="py-8 md:py-12 space-y-10">
       <Container>
-        <Breadcrumbs items={[{ name: 'PDF Tools' }]} />
+        <Breadcrumbs items={[{ name: cmsPage?.name || 'PDF Tools' }]} />
+        <CmsJsonLd schema={cmsPage?.seo?.schemaJson} />
 
         <div className="max-w-3xl mb-8">
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-[#17202A] tracking-tight mb-3">
-            Free Online PDF Tools
+            {cmsPage?.name ? cmsPage.name : 'Free Online PDF Tools'}
           </h1>
           <p className="text-base md:text-lg text-[#667085] leading-relaxed">
             Manage your PDF files securely. Combine documents, extract pages, compress large files, rotate orientations, and convert PDFs without server uploads.

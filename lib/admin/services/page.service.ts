@@ -1,6 +1,7 @@
 import { getDb } from '@/lib/db';
 import { CreatePageInput, UpdatePageInput, AdminUserSession } from '../types';
 import { createAuditLog } from './audit.service';
+import { validatePagePayload } from '../validation';
 
 export async function getPages(options?: { status?: 'DRAFT' | 'PUBLISHED' }) {
   const db = getDb();
@@ -42,6 +43,12 @@ export async function getPageBySlug(slug: string, publishedOnly = false) {
 
 export async function createDraftPage(input: CreatePageInput, author: AdminUserSession) {
   const db = getDb();
+  const validation = validatePagePayload(input);
+  if (!validation.isValid) {
+    const errorDetails = validation.report.errors.map((e) => `${e.field}: ${e.message}`).join(', ');
+    throw new Error(`Validation failed: ${errorDetails}`);
+  }
+
   const cleanSlug = input.slug.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-');
 
   const existing = await db.page.findUnique({
@@ -50,6 +57,8 @@ export async function createDraftPage(input: CreatePageInput, author: AdminUserS
   if (existing) {
     throw new Error(`A page with slug '${cleanSlug}' already exists.`);
   }
+
+  const sanitizedBlocks = validation.sanitizedBlocks.length > 0 ? validation.sanitizedBlocks : input.blocks || [];
 
   const page = await db.page.create({
     data: {
@@ -60,7 +69,7 @@ export async function createDraftPage(input: CreatePageInput, author: AdminUserS
         create: {
           version: 1,
           isPublished: input.status === 'PUBLISHED',
-          blocks: (input.blocks || []) as any,
+          blocks: sanitizedBlocks as any,
           customCss: input.customCss || null,
         },
       },
@@ -102,7 +111,7 @@ export async function createDraftPage(input: CreatePageInput, author: AdminUserS
 
   await createAuditLog({
     userId: author.id,
-    action: 'CREATE_PAGE',
+    action: 'PAGE_CREATED',
     entityType: 'PAGE',
     entityId: page.id,
     metadata: { slug: page.slug, name: page.name },
@@ -126,6 +135,12 @@ export async function updateDraftPage(
     throw new Error(`Page not found: ${id}`);
   }
 
+  const validation = validatePagePayload(input);
+  if (!validation.isValid) {
+    const errorDetails = validation.report.errors.map((e) => `${e.field}: ${e.message}`).join(', ');
+    throw new Error(`Validation failed: ${errorDetails}`);
+  }
+
   // Update Page details
   const updateData: any = {};
   if (input.name) updateData.name = input.name.trim();
@@ -147,10 +162,17 @@ export async function updateDraftPage(
 
   // Update content if provided
   if (input.blocks || input.customCss !== undefined) {
+    const blocksToSave =
+      input.blocks !== undefined
+        ? validation.sanitizedBlocks.length > 0
+          ? validation.sanitizedBlocks
+          : input.blocks
+        : existing.content?.blocks || [];
+
     await db.pageContent.update({
       where: { pageId: id },
       data: {
-        blocks: (input.blocks !== undefined ? input.blocks : existing.content?.blocks || []) as any,
+        blocks: blocksToSave as any,
         customCss: input.customCss !== undefined ? input.customCss : existing.content?.customCss || null,
         version: (existing.content?.version || 1) + 1,
       },
@@ -195,7 +217,7 @@ export async function updateDraftPage(
 
   await createAuditLog({
     userId: author.id,
-    action: 'UPDATE_PAGE',
+    action: 'PAGE_UPDATED',
     entityType: 'PAGE',
     entityId: id,
     metadata: { slug: fullPage?.slug, reason: input.reason },
@@ -243,7 +265,7 @@ export async function publishPage(id: string, author: AdminUserSession) {
 
   await createAuditLog({
     userId: author.id,
-    action: 'PUBLISH_PAGE',
+    action: 'PAGE_PUBLISHED',
     entityType: 'PAGE',
     entityId: id,
     metadata: { slug: updated.slug },
@@ -274,7 +296,7 @@ export async function unpublishPage(id: string, author: AdminUserSession) {
 
   await createAuditLog({
     userId: author.id,
-    action: 'UNPUBLISH_PAGE',
+    action: 'PAGE_UNPUBLISHED',
     entityType: 'PAGE',
     entityId: id,
     metadata: { slug: updated.slug },
@@ -290,3 +312,109 @@ export async function getPageRevisions(pageId: string) {
     orderBy: { createdAt: 'desc' },
   });
 }
+
+export async function getPageRevisionById(pageId: string, revisionId: string) {
+  const db = getDb();
+  const revision = await db.pageRevision.findUnique({
+    where: { id: revisionId },
+  });
+  if (!revision || revision.pageId !== pageId) {
+    return null;
+  }
+  return revision;
+}
+
+export async function restorePageRevision(
+  pageId: string,
+  revisionId: string,
+  author: AdminUserSession
+) {
+  const db = getDb();
+  const page = await db.page.findUnique({
+    where: { id: pageId },
+    include: { content: true, seo: true },
+  });
+  if (!page) throw new Error(`Page not found: ${pageId}`);
+
+  const revision = await getPageRevisionById(pageId, revisionId);
+  if (!revision) throw new Error(`Revision ${revisionId} not found for page ${pageId}`);
+
+  // Restore content snapshot
+  const contentSnapshot = (revision.contentSnapshot || {}) as Record<string, any>;
+  const blocks = contentSnapshot.blocks || [];
+  const customCss = contentSnapshot.customCss || null;
+
+  await db.pageContent.update({
+    where: { pageId },
+    data: {
+      blocks: blocks as any,
+      customCss,
+      version: (page.content?.version || 1) + 1,
+    },
+  });
+
+  // Restore SEO snapshot if present
+  if (revision.seoSnapshot) {
+    const seoSnapshot = revision.seoSnapshot as Record<string, any>;
+    await db.pageSeo.update({
+      where: { pageId },
+      data: {
+        seoTitle: seoSnapshot.seoTitle ?? null,
+        metaDescription: seoSnapshot.metaDescription ?? null,
+        canonicalUrl: seoSnapshot.canonicalUrl ?? null,
+        robotsIndex: seoSnapshot.robotsIndex !== false,
+        robotsFollow: seoSnapshot.robotsFollow !== false,
+        ogTitle: seoSnapshot.ogTitle ?? null,
+        ogDescription: seoSnapshot.ogDescription ?? null,
+        ogImage: seoSnapshot.ogImage ?? null,
+        twitterTitle: seoSnapshot.twitterTitle ?? null,
+        twitterDescription: seoSnapshot.twitterDescription ?? null,
+        twitterImage: seoSnapshot.twitterImage ?? null,
+        schemaType: seoSnapshot.schemaType ?? null,
+        schemaJson: seoSnapshot.schemaJson ?? undefined,
+        focusKeyword: seoSnapshot.focusKeyword ?? null,
+      },
+    });
+  }
+
+  // Create a brand new revision snapshot recording the restoration
+  const newRevision = await db.pageRevision.create({
+    data: {
+      pageId,
+      contentSnapshot: { blocks, customCss },
+      seoSnapshot: revision.seoSnapshot,
+      authorId: author.id,
+      reason: `Restored from revision ${revisionId}`,
+    },
+  });
+
+  await createAuditLog({
+    userId: author.id,
+    action: 'PAGE_REVISION_RESTORED',
+    entityType: 'PAGE',
+    entityId: pageId,
+    metadata: {
+      restoredRevisionId: revisionId,
+      newRevisionId: newRevision.id,
+      pageSlug: page.slug,
+    },
+  });
+
+  return getPageById(pageId);
+}
+
+export async function previewDraftPage(id: string, author: AdminUserSession) {
+  const page = await getPageById(id);
+  if (!page) return null;
+
+  await createAuditLog({
+    userId: author.id,
+    action: 'PAGE_PREVIEWED',
+    entityType: 'PAGE',
+    entityId: id,
+    metadata: { slug: page.slug },
+  });
+
+  return page;
+}
+

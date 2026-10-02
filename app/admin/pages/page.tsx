@@ -129,13 +129,13 @@ export default function AdminPagesPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowCreateModal(true)}
+          <Link
+            href="/admin/pages/new"
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#124A57] hover:bg-[#0E3B46] rounded-lg shadow-sm transition-all"
           >
             <Plus className="w-4 h-4" />
-            <span>Create Draft Page</span>
-          </button>
+            <span>Create New Page</span>
+          </Link>
         </div>
       </div>
 
@@ -225,7 +225,39 @@ export default function AdminPagesPage() {
                     <td className="px-5 py-3.5 text-[#64748B]">
                       {new Date(page.updatedAt).toLocaleDateString()}
                     </td>
-                    <td className="px-5 py-3.5 text-right space-x-2">
+                    <td className="px-5 py-3.5 text-right space-x-1.5 whitespace-nowrap">
+                      <Link
+                        href={`/admin/pages/${page.id}`}
+                        className="px-2.5 py-1 text-[11px] font-semibold text-[#124A57] bg-[#E6F4F1] hover:bg-[#D5EAE6] rounded transition-colors inline-block"
+                      >
+                        Edit
+                      </Link>
+
+                      <Link
+                        href={`/admin/pages/${page.id}/preview`}
+                        className="px-2 py-1 text-[11px] font-medium text-[#475467] bg-[#F1F5F9] hover:bg-[#E2E8F0] rounded transition-colors inline-block"
+                      >
+                        Preview
+                      </Link>
+
+                      <Link
+                        href={`/admin/pages/${page.id}/revisions`}
+                        className="px-2 py-1 text-[11px] font-medium text-[#475467] bg-[#F1F5F9] hover:bg-[#E2E8F0] rounded transition-colors inline-block"
+                      >
+                        Revisions
+                      </Link>
+
+                      <button
+                        onClick={() => handleTogglePublish(page)}
+                        className={`px-2 py-1 rounded text-[11px] font-semibold transition-colors ${
+                          page.status === 'PUBLISHED'
+                            ? 'bg-[#FEF2F2] text-[#DC2626] hover:bg-[#FEE2E2]'
+                            : 'bg-[#E6F4F1] text-[#124A57] hover:bg-[#CDE1E5]'
+                        }`}
+                      >
+                        {page.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}
+                      </button>
+
                       <Link
                         href={`/${page.slug === 'home' ? '' : page.slug}`}
                         target="_blank"
@@ -234,17 +266,6 @@ export default function AdminPagesPage() {
                       >
                         <ExternalLink className="w-3.5 h-3.5" />
                       </Link>
-
-                      <button
-                        onClick={() => handleTogglePublish(page)}
-                        className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
-                          page.status === 'PUBLISHED'
-                            ? 'bg-[#FEF2F2] text-[#DC2626] hover:bg-[#FEE2E2]'
-                            : 'bg-[#E6F4F1] text-[#124A57] hover:bg-[#CDE1E5]'
-                        }`}
-                      >
-                        {page.status === 'PUBLISHED' ? 'Unpublish' : 'Publish'}
-                      </button>
                     </td>
                   </tr>
                 ))}

@@ -1,4 +1,5 @@
 import React from 'react';
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ArrowRight, ShieldCheck, Zap, Lock, Smartphone } from 'lucide-react';
 import Container from '@/components/layout/Container';
@@ -8,8 +9,20 @@ import FAQ from '@/components/seo/FAQ';
 import { getAllTools, getToolBySlug } from '@/lib/tools';
 import { getAllFormats } from '@/lib/formats';
 import { GENERAL_FAQS } from '@/lib/faq';
+import { getPublishedPage, buildCmsMetadata, CmsJsonLd } from '@/lib/cms/page-resolver';
 
-export default function HomePage() {
+const DEFAULT_METADATA: Metadata = {
+  title: 'Free Online File Tools – Convert, Compress & Edit Files Free',
+  description: 'Fast, secure, 100% free image and PDF conversion utilities. Convert JPG, PNG, WEBP, HEIC, PDF and compress documents with complete client-side privacy.',
+};
+
+export async function generateMetadata(): Promise<Metadata> {
+  const cmsPage = await getPublishedPage('home');
+  return buildCmsMetadata(cmsPage, DEFAULT_METADATA);
+}
+
+export default async function HomePage() {
+  const cmsPage = await getPublishedPage('home');
   const allTools = getAllTools();
   const allFormats = getAllFormats();
 
@@ -24,12 +37,14 @@ export default function HomePage() {
 
   return (
     <div className="space-y-12 md:space-y-20 pb-16">
+      <CmsJsonLd schema={cmsPage?.seo?.schemaJson} />
+
       {/* 1. HERO SECTION */}
       <section className="pt-10 md:pt-16 pb-8 bg-gradient-to-b from-[#F8FAFC] to-[#FFFFFF] border-b border-[#E5E7EB]">
         <Container className="text-center">
           <div className="max-w-3xl mx-auto space-y-4 mb-8">
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-[#17202A] tracking-tight">
-              Free Online File Tools
+              {cmsPage?.name ? cmsPage.name : 'Free Online File Tools'}
             </h1>
             <p className="text-base sm:text-lg md:text-xl text-[#667085] leading-relaxed">
               Convert, compress and manage your files quickly and easily.

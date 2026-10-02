@@ -5,24 +5,32 @@ import Breadcrumbs from '@/components/seo/Breadcrumbs';
 import ToolCard from '@/components/tool/ToolCard';
 import AdSlot from '@/components/ads/AdSlot';
 import { getToolsByCategory } from '@/lib/tools';
+import { getPublishedPage, buildCmsMetadata, CmsJsonLd } from '@/lib/cms/page-resolver';
 
-export const metadata: Metadata = {
+const DEFAULT_METADATA: Metadata = {
   title: 'Free Online Image Tools – Convert, Compress & Edit Photos',
   description: 'Free browser-based image converters and utilities. Convert JPG, PNG, WEBP, HEIC, compress photos, resize, crop, and rotate with 100% privacy.',
 };
 
-export default function ImageToolsPage() {
+export async function generateMetadata(): Promise<Metadata> {
+  const cmsPage = await getPublishedPage('image-tools');
+  return buildCmsMetadata(cmsPage, DEFAULT_METADATA);
+}
+
+export default async function ImageToolsPage() {
+  const cmsPage = await getPublishedPage('image-tools');
   const converters = getToolsByCategory('image-converter');
   const utilities = getToolsByCategory('image-utility');
 
   return (
     <div className="py-8 md:py-12 space-y-10">
       <Container>
-        <Breadcrumbs items={[{ name: 'Image Tools' }]} />
+        <Breadcrumbs items={[{ name: cmsPage?.name || 'Image Tools' }]} />
+        <CmsJsonLd schema={cmsPage?.seo?.schemaJson} />
 
         <div className="max-w-3xl mb-8">
           <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-[#17202A] tracking-tight mb-3">
-            Free Online Image Tools
+            {cmsPage?.name ? cmsPage.name : 'Free Online Image Tools'}
           </h1>
           <p className="text-base md:text-lg text-[#667085] leading-relaxed">
             Convert image formats, optimize file sizes, crop, resize, and rotate pictures directly in your browser with zero uploads to remote servers.

@@ -67,8 +67,6 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           name: 'Blog',
           href: '/admin/blog',
           icon: BookOpen,
-          badge: 'Phase 02',
-          disabled: true,
         },
       ],
     },
@@ -79,8 +77,6 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           name: 'Media',
           href: '/admin/media',
           icon: ImageIcon,
-          badge: 'Phase 03',
-          disabled: true,
         },
         {
           name: 'SEO',
