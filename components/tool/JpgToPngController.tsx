@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   UploadCloud,
   FileCheck,
@@ -709,6 +710,45 @@ export function JpgToPngController() {
                 </button>
               </div>
             </div>
+
+            {/* Post-Action Related Tools Discovery */}
+            {completedCount > 0 && pendingCount === 0 && (
+              <div className="mt-8 pt-6 border-t border-[#E5E7EB] text-left">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[#124A57]">
+                    Next steps with your image
+                  </p>
+                  <Link
+                    href="/image-tools"
+                    className="text-xs font-medium text-[#124A57] hover:underline inline-flex items-center gap-1"
+                  >
+                    <span>Explore all image tools</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {[
+                    { name: 'PNG to JPG', slug: 'png-to-jpg', desc: 'Revert to JPG' },
+                    { name: 'JPG to WebP', slug: 'jpg-to-webp', desc: 'Modern web image' },
+                    { name: 'Compress Image', slug: 'compress-image', desc: 'Shrink file size' },
+                    { name: 'Resize Image', slug: 'resize-image', desc: 'Custom dimensions' },
+                  ].map((tool) => (
+                    <Link
+                      key={tool.slug}
+                      href={`/tools/${tool.slug}`}
+                      className="p-3 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#124A57] hover:bg-[#F0F7F8] rounded-lg transition-colors group"
+                    >
+                      <p className="text-xs font-semibold text-[#17202A] group-hover:text-[#124A57] truncate">
+                        {tool.name}
+                      </p>
+                      <p className="text-[11px] text-[#667085] truncate mt-0.5">
+                        {tool.desc}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

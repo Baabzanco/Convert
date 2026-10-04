@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import {
   UploadCloud,
   AlertCircle,
@@ -12,13 +13,18 @@ import {
   ShieldCheck,
   Minimize2,
   ArrowDown,
+  ArrowRight,
   Info,
+  Sliders,
 } from 'lucide-react';
 import { formatBytes, triggerBlobDownload } from '@/engines/shared/file-utils';
 import {
   compressPdf,
   CompressPdfResult,
   CompressPdfProgress,
+  PdfCompressionQuality,
+  ALLOWED_PDF_COMPRESSION_QUALITIES,
+  DEFAULT_PDF_COMPRESSION_QUALITY,
 } from '@/engines/pdf/compress';
 import { loadPdfDocument, LoadedPdfDocument } from '@/engines/pdf/loader';
 import { validateCompressPdfFile } from '@/engines/pdf/validation';
@@ -28,6 +34,9 @@ export function CompressPdfController() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [pdfDocInfo, setPdfDocInfo] = useState<LoadedPdfDocument | null>(null);
+  const [quality, setQuality] = useState<PdfCompressionQuality>(
+    DEFAULT_PDF_COMPRESSION_QUALITY
+  );
 
   // Processing state
   const [isLoadingPdf, setIsLoadingPdf] = useState(false);
@@ -156,7 +165,7 @@ export function CompressPdfController() {
     try {
       const res = await compressPdf(
         file,
-        {},
+        { quality },
         (p: CompressPdfProgress) => {
           setProgress(p.progress);
           setProgressMessage(p.message);
@@ -312,6 +321,95 @@ export function CompressPdfController() {
               )}
             </div>
 
+            {/* Compression Quality Selection Panel */}
+            <div className="p-4 md:p-5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <div className="flex items-center gap-2">
+                  <Sliders className="w-4 h-4 text-[#124A57]" />
+                  <span className="text-sm font-semibold text-[#17202A]">
+                    Compression Quality
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-bold text-[#124A57] bg-[#E0EFF2] px-2.5 py-0.5 rounded-full">
+                    {quality}% Quality
+                  </span>
+                  <span className="text-[#667085]">
+                    {quality <= 50
+                      ? 'Strongest Compression'
+                      : quality === 70
+                      ? 'Balanced (Recommended)'
+                      : quality === 60
+                      ? 'Medium-High'
+                      : 'High Fidelity'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Segmented Quality Radio Buttons */}
+              <div
+                role="radiogroup"
+                aria-label="Compression Quality"
+                className="grid grid-cols-3 sm:grid-cols-6 gap-2"
+              >
+                {ALLOWED_PDF_COMPRESSION_QUALITIES.map((q) => {
+                  const isSelected = quality === q;
+                  return (
+                    <button
+                      key={q}
+                      id={`compress-pdf-quality-${q}`}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      tabIndex={isSelected ? 0 : -1}
+                      disabled={isCompressing}
+                      onClick={() => setQuality(q)}
+                      onKeyDown={(e) => {
+                        const idx = ALLOWED_PDF_COMPRESSION_QUALITIES.indexOf(q);
+                        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          const next =
+                            ALLOWED_PDF_COMPRESSION_QUALITIES[
+                              (idx + 1) % ALLOWED_PDF_COMPRESSION_QUALITIES.length
+                            ];
+                          setQuality(next);
+                        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          const prev =
+                            ALLOWED_PDF_COMPRESSION_QUALITIES[
+                              (idx - 1 + ALLOWED_PDF_COMPRESSION_QUALITIES.length) %
+                                ALLOWED_PDF_COMPRESSION_QUALITIES.length
+                            ];
+                          setQuality(prev);
+                        }
+                      }}
+                      className={`py-2 px-3 rounded-lg text-sm font-semibold transition-all border text-center flex flex-col items-center justify-center ${
+                        isSelected
+                          ? 'bg-[#124A57] text-white border-[#124A57] shadow-sm'
+                          : 'bg-[#FFFFFF] text-[#475467] border-[#CBD5E1] hover:border-[#124A57] hover:bg-[#F8FAFC]'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      <span>{q}%</span>
+                      {q === 70 && (
+                        <span
+                          className={`text-[10px] font-normal leading-tight ${
+                            isSelected ? 'text-[#E0EFF2]' : 'text-[#667085]'
+                          }`}
+                        >
+                          Default
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between text-xs text-[#667085] pt-1">
+                <span>Lower quality = smaller file</span>
+                <span>Higher quality = better visual quality</span>
+              </div>
+            </div>
+
             {/* Information Callout */}
             <div className="p-4 rounded-xl bg-[#F0FDF4] border border-[#BBF7D0] flex items-start gap-3">
               <ShieldCheck className="w-5 h-5 text-[#16A34A] shrink-0 mt-0.5" />
@@ -371,8 +469,17 @@ export function CompressPdfController() {
                     PDF compressed successfully
                   </h3>
                   <p className="text-sm text-[#475467] mt-1">
-                    Your document has been optimized without loss of vector clarity.
+                    {result.recompressedImageCount > 0
+                      ? `Optimized ${result.recompressedImageCount} raster ${
+                          result.recompressedImageCount === 1 ? 'image' : 'images'
+                        } with vector and layout clarity preserved.`
+                      : 'Optimized document structure with vector diagrams and typography preserved.'}
                   </p>
+                  <div className="pt-1">
+                    <span className="inline-flex items-center text-xs font-semibold text-[#124A57] bg-[#E0EFF2] px-2.5 py-0.5 rounded-full">
+                      Compression Quality: {result.quality}%
+                    </span>
+                  </div>
                 </div>
 
                 {/* Size Comparison Stats Card */}
@@ -421,6 +528,43 @@ export function CompressPdfController() {
                     <RefreshCw className="w-4 h-4" />
                     <span>Compress another PDF</span>
                   </button>
+                </div>
+
+                {/* Post-Action Related Tools Discovery */}
+                <div className="mt-8 pt-6 border-t border-[#E2E8F0] text-left">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[#124A57]">
+                      What would you like to do next?
+                    </p>
+                    <Link
+                      href="/pdf-tools"
+                      className="text-xs font-medium text-[#124A57] hover:underline inline-flex items-center gap-1"
+                    >
+                      <span>Explore all PDF tools</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </Link>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {[
+                      { name: 'Merge PDF', slug: 'merge-pdf', desc: 'Combine multiple PDFs' },
+                      { name: 'Split PDF', slug: 'split-pdf', desc: 'Extract pages' },
+                      { name: 'PDF to JPG', slug: 'pdf-to-jpg', desc: 'Convert to images' },
+                      { name: 'PDF to PNG', slug: 'pdf-to-png', desc: 'Lossless graphics' },
+                    ].map((tool) => (
+                      <Link
+                        key={tool.slug}
+                        href={`/tools/${tool.slug}`}
+                        className="p-3 bg-[#FFFFFF] border border-[#E2E8F0] hover:border-[#124A57] hover:bg-[#F0F7F8] rounded-lg transition-colors group"
+                      >
+                        <p className="text-xs font-semibold text-[#17202A] group-hover:text-[#124A57] truncate">
+                          {tool.name}
+                        </p>
+                        <p className="text-[11px] text-[#667085] truncate mt-0.5">
+                          {tool.desc}
+                        </p>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : (

@@ -9,6 +9,7 @@ import {
   ToolFaqItem,
 } from './types';
 import { getToolBySlug } from '@/lib/tools';
+import { normalizeBlock } from '@/lib/cms/blocks';
 
 export interface ValidationIssue {
   field: string;
@@ -197,147 +198,49 @@ export function validateSeo(seo?: PageSeoInput | null): ValidationReport {
  */
 export function validateAndSanitizeBlock(block: any): {
   isValid: boolean;
-  block?: StructuredPageBlock;
+  block?: any;
   error?: string;
 } {
   if (!block || typeof block !== 'object') {
     return { isValid: false, error: 'Block must be an object.' };
   }
 
-  const id = block.id || `blk-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  const type = block.type;
+  // Normalize block into standard UniversalContentBlock structure with legacy root fields
+  const normalized = normalizeBlock(block);
+  const type = normalized.type;
+  const content = normalized.content || {};
 
-  switch (type) {
-    case 'section':
-      return {
-        isValid: true,
-        block: {
-          id,
-          type: 'section',
-          title: String(block.title || block.data?.title || '').trim(),
-          description: block.description || block.data?.description ? String(block.description || block.data?.description).trim() : undefined,
-        },
-      };
-
-    case 'heading': {
-      const level = Number(block.level || block.data?.level || 2);
-      const safeLevel = ([1, 2, 3].includes(level) ? level : 2) as 1 | 2 | 3;
-      return {
-        isValid: true,
-        block: {
-          id,
-          type: 'heading',
-          level: safeLevel,
-          text: String(block.text || block.data?.text || '').trim(),
-        },
-      };
+  // Check CTA/Link/Image URL safety
+  if (type === 'cta' || type === 'link') {
+    const href = String(content.href || normalized.href || '').trim();
+    if (href && !isSafeUrl(href)) {
+      return { isValid: false, error: `Unsafe URL detected in ${type}: ${href}` };
     }
-
-    case 'paragraph':
-      return {
-        isValid: true,
-        block: {
-          id,
-          type: 'paragraph',
-          text: String(block.text || block.data?.text || '').trim(),
-        },
-      };
-
-    case 'rich_text':
-      return {
-        isValid: true,
-        block: {
-          id,
-          type: 'rich_text',
-          html: sanitizeRichTextHtml(block.html || block.data?.html || ''),
-        },
-      };
-
-    case 'cta': {
-      const href = String(block.href || block.data?.href || '').trim();
-      if (href && !isSafeUrl(href)) {
-        return { isValid: false, error: `Unsafe CTA URL detected: ${href}` };
-      }
-      return {
-        isValid: true,
-        block: {
-          id,
-          type: 'cta',
-          label: String(block.label || block.data?.label || '').trim(),
-          href: href || '#',
-          variant: block.variant || block.data?.variant || 'primary',
-        },
-      };
-    }
-
-    case 'link': {
-      const href = String(block.href || block.data?.href || '').trim();
-      if (href && !isSafeUrl(href)) {
-        return { isValid: false, error: `Unsafe Link URL detected: ${href}` };
-      }
-      return {
-        isValid: true,
-        block: {
-          id,
-          type: 'link',
-          text: String(block.text || block.data?.text || '').trim(),
-          href: href || '#',
-          isExternal: Boolean(block.isExternal ?? block.data?.isExternal),
-        },
-      };
-    }
-
-    case 'image': {
-      const src = String(block.src || block.data?.src || '').trim();
-      if (src && !isSafeUrl(src)) {
-        return { isValid: false, error: `Unsafe Image URL detected: ${src}` };
-      }
-      return {
-        isValid: true,
-        block: {
-          id,
-          type: 'image',
-          src: src || '',
-          alt: String(block.alt || block.data?.alt || '').trim(),
-          caption: block.caption || block.data?.caption ? String(block.caption || block.data?.caption).trim() : undefined,
-        },
-      };
-    }
-
-    case 'faq':
-      return {
-        isValid: true,
-        block: {
-          id,
-          type: 'faq',
-          question: String(block.question || block.data?.question || '').trim(),
-          answer: String(block.answer || block.data?.answer || '').trim(),
-        },
-      };
-
-    case 'feature':
-      return {
-        isValid: true,
-        block: {
-          id,
-          type: 'feature',
-          title: String(block.title || block.data?.title || '').trim(),
-          description: String(block.description || block.data?.description || '').trim(),
-          icon: block.icon || block.data?.icon ? String(block.icon || block.data?.icon).trim() : undefined,
-        },
-      };
-
-    default:
-      // Backward compatibility for generic ContentBlock
-      return {
-        isValid: true,
-        block: {
-          id,
-          type: 'paragraph',
-          text: String(block.data?.text || block.text || '').trim(),
-        },
-      };
+    content.href = href || '#';
   }
+
+  if (type === 'image') {
+    const src = String(content.src || normalized.src || '').trim();
+    if (src && !isSafeUrl(src)) {
+      return { isValid: false, error: `Unsafe Image URL detected: ${src}` };
+    }
+    content.src = src || '';
+  }
+
+  // HTML Sanitization for rich text
+  if (type === 'rich_text' && (content.html !== undefined || normalized.html !== undefined)) {
+    content.html = sanitizeRichTextHtml(content.html || normalized.html || '');
+  }
+
+  // Sync content back to root properties for backward-compatible rendering
+  for (const [key, value] of Object.entries(content)) {
+    normalized[key] = value;
+  }
+
+  return {
+    isValid: true,
+    block: normalized,
+  };
 }
 
 /**
@@ -422,6 +325,7 @@ export function validateToolPayload(
     customFeatures?: ToolFeatureItem[] | null;
     customFaq?: ToolFaqItem[] | null;
     customRelatedTools?: string[] | null;
+    blocks?: any[] | null;
   };
   report: ValidationReport;
 } {
@@ -579,6 +483,25 @@ export function validateToolPayload(
     }
   }
 
+  // 8. Content Blocks validation
+  let sanitizedBlocks: any[] | null = null;
+  if (input.blocks !== undefined && input.blocks !== null) {
+    if (!Array.isArray(input.blocks)) {
+      errors.push({ field: 'blocks', message: 'Blocks must be an array.' });
+    } else {
+      sanitizedBlocks = [];
+      for (let i = 0; i < input.blocks.length; i++) {
+        const b = input.blocks[i];
+        const validated = validateAndSanitizeBlock(b);
+        if (!validated.isValid) {
+          errors.push({ field: `blocks[${i}]`, message: validated.error || 'Invalid block structure.' });
+        } else {
+          sanitizedBlocks.push(validated.block);
+        }
+      }
+    }
+  }
+
   return {
     isValid: errors.length === 0,
     sanitized: {
@@ -591,6 +514,7 @@ export function validateToolPayload(
       customFeatures: sanitizedFeatures,
       customFaq: sanitizedFaq,
       customRelatedTools: sanitizedRelatedTools,
+      blocks: sanitizedBlocks,
     },
     report: {
       isValid: errors.length === 0,

@@ -81,7 +81,7 @@ export function AdminLayoutClient({ children }: AdminLayoutClientProps) {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex text-[#17202A]">
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col md:pl-64 text-[#17202A]">
       <AdminSidebar
         role={user?.role}
         isOpen={sidebarOpen}

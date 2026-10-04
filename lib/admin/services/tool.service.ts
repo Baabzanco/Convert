@@ -67,6 +67,7 @@ export async function getMergedTool(
       features: customFeatures,
       faq: customFaq,
       relatedTools: customRelatedTools,
+      blocks: override.blocks ? (override.blocks as any[]) : undefined,
     };
   } catch {
     return canonical;
@@ -156,6 +157,7 @@ export async function upsertToolContent(
       customFeatures: (sanitized.customFeatures as any) ?? undefined,
       customFaq: (sanitized.customFaq as any) ?? undefined,
       customRelatedTools: (sanitized.customRelatedTools as any) ?? undefined,
+      blocks: (sanitized.blocks as any) ?? undefined,
       isPublished: input.isPublished !== undefined ? input.isPublished : false,
       seo: input.seo
         ? {
@@ -188,6 +190,7 @@ export async function upsertToolContent(
       customFeatures: sanitized.customFeatures !== undefined ? (sanitized.customFeatures as any) : undefined,
       customFaq: sanitized.customFaq !== undefined ? (sanitized.customFaq as any) : undefined,
       customRelatedTools: sanitized.customRelatedTools !== undefined ? (sanitized.customRelatedTools as any) : undefined,
+      blocks: sanitized.blocks !== undefined ? (sanitized.blocks as any) : undefined,
       isPublished: input.isPublished !== undefined ? input.isPublished : undefined,
       seo: input.seo
         ? {
@@ -246,6 +249,7 @@ export async function upsertToolContent(
         customFeatures: updated.customFeatures,
         customFaq: updated.customFaq,
         customRelatedTools: updated.customRelatedTools,
+        blocks: (updated as any).blocks || [],
         isPublished: updated.isPublished,
       },
       seoSnapshot: updated.seo ? { ...updated.seo } : null,
@@ -307,6 +311,7 @@ export async function publishTool(slug: string, author: AdminUserSession) {
         customFeatures: updated.customFeatures,
         customFaq: updated.customFaq,
         customRelatedTools: updated.customRelatedTools,
+        blocks: (updated as any).blocks || [],
         isPublished: true,
       },
       seoSnapshot: (updated.seo as any) ?? undefined,
@@ -368,6 +373,7 @@ export async function unpublishTool(slug: string, author: AdminUserSession) {
         customFeatures: updated.customFeatures,
         customFaq: updated.customFaq,
         customRelatedTools: updated.customRelatedTools,
+        blocks: (updated as any).blocks || [],
         isPublished: false,
       },
       seoSnapshot: (updated.seo as any) ?? undefined,
@@ -455,6 +461,7 @@ export async function restoreToolRevision(
       customFeatures: snap.customFeatures ?? undefined,
       customFaq: snap.customFaq ?? undefined,
       customRelatedTools: snap.customRelatedTools ?? undefined,
+      blocks: snap.blocks ?? undefined,
       isPublished: false, // restoring reverts to draft for safe review
     },
     update: {
@@ -467,6 +474,7 @@ export async function restoreToolRevision(
       customFeatures: snap.customFeatures ?? undefined,
       customFaq: snap.customFaq ?? undefined,
       customRelatedTools: snap.customRelatedTools ?? undefined,
+      blocks: snap.blocks ?? undefined,
       isPublished: false,
     },
     include: { seo: true },

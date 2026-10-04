@@ -38,6 +38,7 @@ export interface ToolDefinition {
   }[];
   youMayAlsoNeed?: string[];
   relatedTools: string[];
+  blocks?: any[];
 }
 
 export const TOOLS: ToolDefinition[] = [

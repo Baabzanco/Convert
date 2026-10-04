@@ -34,6 +34,10 @@ model AdminUser {
   role         Role           @default(EDITOR)
   isActive     Boolean        @default(true)
   lastLoginAt  DateTime?
+  failedLoginAttempts     Int            @default(0)
+  lockedUntil             DateTime?
+  passwordResetTokenHash  String?
+  passwordResetExpiresAt  DateTime?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   auditLogs    AuditLog[]
@@ -111,6 +115,7 @@ model ToolContent {
   customFeatures  Json?
   customFaq       Json?
   customRelatedTools Json?
+  blocks          Json     @default("[]")
   isPublished     Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -346,4 +351,45 @@ model MediaAsset {
   @@index([createdAt])
   @@index([uploadedById])
   @@map("media_assets")
+}
+
+model NavigationItem {
+  id           String   @id @default(cuid())
+  menu         String   @default("header")
+  label        String
+  destination  String
+  order        Int      @default(0)
+  visible      Boolean  @default(true)
+  icon         String?
+  isExternal   Boolean  @default(false)
+  openNewTab   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("navigation_items")
+}
+
+model FooterSettings {
+  id               String   @id @default("default")
+  brandDescription String?
+  copyrightText    String?
+  trustText        String?
+  linksJson        Json?
+  updatedAt        DateTime @updatedAt
+
+  @@map("footer_settings")
+}
+
+model FormatContent {
+  id              String   @id @default(cuid())
+  formatSlug      String   @unique
+  customTitle     String?
+  customDescription String?
+  customDetails   String?
+  customBestFor   String?
+  customPros      Json?
+  customCons      Json?
+  updatedAt       DateTime @updatedAt
+
+  @@map("format_contents")
 }

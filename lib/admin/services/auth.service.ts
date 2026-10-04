@@ -9,6 +9,9 @@ export interface LoginResult {
   token: string;
 }
 
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+
 export async function loginAdmin(credentials: {
   email?: string;
   password?: string;
@@ -44,21 +47,61 @@ export async function loginAdmin(credentials: {
     throw new Error('Your administrative account has been deactivated. Please contact a super administrator.');
   }
 
-  const isMatch = await verifyPassword(password, user.passwordHash);
-  if (!isMatch) {
+  const now = new Date();
+
+  // Check if account is currently locked
+  if (user.lockedUntil && new Date(user.lockedUntil) > now) {
+    const remainingMins = Math.ceil((new Date(user.lockedUntil).getTime() - now.getTime()) / 60000);
     await createAuditLog({
       userId: user.id,
-      action: 'LOGIN_FAILED',
+      action: 'LOGIN_LOCKED',
       entityType: 'AUTH',
-      metadata: { email, reason: 'incorrect_password' },
+      metadata: { email, reason: 'account_locked', remainingMinutes: remainingMins },
     });
+    throw new Error(`Account is temporarily locked due to repeated failed login attempts. Please try again in ${remainingMins} minute${remainingMins === 1 ? '' : 's'}.`);
+  }
+
+  const isMatch = await verifyPassword(password, user.passwordHash);
+  if (!isMatch) {
+    const newAttempts = (user.failedLoginAttempts || 0) + 1;
+    const isNowLocked = newAttempts >= MAX_FAILED_ATTEMPTS;
+    const lockedUntil = isNowLocked ? new Date(Date.now() + LOCKOUT_DURATION_MS) : null;
+
+    await db.adminUser.update({
+      where: { id: user.id },
+      data: {
+        failedLoginAttempts: newAttempts,
+        lockedUntil,
+      },
+    });
+
+    await createAuditLog({
+      userId: user.id,
+      action: isNowLocked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED',
+      entityType: 'AUTH',
+      metadata: {
+        email,
+        reason: 'incorrect_password',
+        failedAttempts: newAttempts,
+        isLocked: isNowLocked,
+      },
+    });
+
+    if (isNowLocked) {
+      throw new Error('Account is temporarily locked due to repeated failed login attempts. Please try again in 15 minutes.');
+    }
+
     throw new Error('Invalid email or password.');
   }
 
-  // Update lastLoginAt
+  // On successful login, reset failed attempts & update lastLoginAt
   await db.adminUser.update({
     where: { id: user.id },
-    data: { lastLoginAt: new Date() },
+    data: {
+      lastLoginAt: new Date(),
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    },
   });
 
   const sessionUser: AdminUserSession = {

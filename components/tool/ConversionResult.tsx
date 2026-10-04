@@ -1,7 +1,14 @@
 import React from 'react';
+import Link from 'next/link';
 import { CheckCircle2, FileCheck, ArrowRight } from 'lucide-react';
 import { formatBytes } from '@/engines/shared/file-utils';
 import DownloadButton from './DownloadButton';
+
+export interface RelatedToolSuggestion {
+  name: string;
+  slug: string;
+  desc?: string;
+}
 
 export interface ConversionResultData {
   fileName: string;
@@ -10,6 +17,9 @@ export interface ConversionResultData {
   downloadUrl?: string;
   onDownload?: () => void;
   onReset?: () => void;
+  relatedTools?: RelatedToolSuggestion[];
+  categoryHubUrl?: string;
+  categoryHubName?: string;
 }
 
 interface ConversionResultProps {
@@ -85,6 +95,44 @@ export function ConversionResult({ result, className = '' }: ConversionResultPro
           </button>
         )}
       </div>
+
+      {/* Post-Action Related Tools Discovery */}
+      {result.relatedTools && result.relatedTools.length > 0 && (
+        <div className="mt-8 pt-6 border-t border-[#E5E7EB] text-left">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#124A57]">
+              Next steps with your file
+            </p>
+            {result.categoryHubUrl && (
+              <Link
+                href={result.categoryHubUrl}
+                className="text-xs font-medium text-[#124A57] hover:underline inline-flex items-center gap-1"
+              >
+                <span>Explore {result.categoryHubName || 'all tools'}</span>
+                <ArrowRight className="w-3 h-3" />
+              </Link>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            {result.relatedTools.map((tool) => (
+              <Link
+                key={tool.slug}
+                href={`/tools/${tool.slug}`}
+                className="p-3 bg-[#FFFFFF] border border-[#E5E7EB] hover:border-[#124A57] hover:bg-[#F0F7F8] rounded-lg transition-colors group"
+              >
+                <p className="text-xs font-semibold text-[#17202A] group-hover:text-[#124A57] truncate">
+                  {tool.name}
+                </p>
+                {tool.desc && (
+                  <p className="text-[11px] text-[#667085] truncate mt-0.5">
+                    {tool.desc}
+                  </p>
+                )}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

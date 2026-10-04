@@ -99,8 +99,6 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           name: 'Users',
           href: '/admin/users',
           icon: Users,
-          badge: 'Phase 05',
-          disabled: true,
         },
       ],
     },
@@ -118,7 +116,7 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       )}
 
       <aside
-        className={`fixed md:sticky top-0 left-0 h-screen w-64 bg-[#0E3B46] text-white flex flex-col z-50 transition-transform duration-200 ease-in-out shrink-0 ${
+        className={`fixed top-0 left-0 h-screen w-64 bg-[#0E3B46] text-white flex flex-col z-50 transition-transform duration-200 ease-in-out shrink-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >

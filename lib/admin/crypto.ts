@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const SALT_ROUNDS = 12;
 
@@ -25,3 +26,18 @@ export async function verifyPassword(plainText: string, hash: string): Promise<b
     return false;
   }
 }
+
+/**
+ * Generates a cryptographically secure 64-character hex token for password resets.
+ */
+export function generateSecureToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+/**
+ * Computes a SHA-256 hash of a reset token for secure database storage.
+ */
+export function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+

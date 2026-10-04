@@ -190,6 +190,7 @@ export interface UpdateToolContentInput {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   customFaq?: any;
   customRelatedTools?: string[] | null;
+  blocks?: any;
   isPublished?: boolean;
   seo?: PageSeoInput;
   reason?: string;
@@ -377,4 +378,44 @@ export interface ListMediaOptions {
   sortBy?: 'createdAt' | 'size' | 'filename';
   sortOrder?: 'asc' | 'desc';
 }
+
+export interface AdminUserItem {
+  id: string;
+  email: string;
+  name: string;
+  role: AdminRole;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  failedLoginAttempts: number;
+  lockedUntil: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAdminUserInput {
+  email: string;
+  name: string;
+  password?: string;
+  role: AdminRole;
+  isActive?: boolean;
+}
+
+export interface UpdateAdminUserInput {
+  name?: string;
+  email?: string;
+  role?: AdminRole;
+  isActive?: boolean;
+  password?: string;
+}
+
+export interface ListAdminUsersOptions {
+  search?: string;
+  role?: AdminRole;
+  isActive?: boolean;
+  page?: number;
+  limit?: number;
+  sortBy?: 'createdAt' | 'name' | 'lastLoginAt' | 'email';
+  sortOrder?: 'asc' | 'desc';
+}
+
 

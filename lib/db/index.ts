@@ -9,6 +9,10 @@ export const DEFAULT_ADMIN = {
   role: 'SUPER_ADMIN' as Role,
   isActive: true,
   lastLoginAt: null as Date | null,
+  failedLoginAttempts: 0,
+  lockedUntil: null as Date | null,
+  passwordResetTokenHash: null as string | null,
+  passwordResetExpiresAt: null as Date | null,
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
   updatedAt: new Date('2026-01-01T00:00:00.000Z'),
 };
@@ -31,6 +35,9 @@ interface MemoryStorage {
   mediaAssets: Map<string, any>;
   auditLogs: any[];
   globalSettings: any;
+  navigationItems: Map<string, any>;
+  footerSettings: Map<string, any>;
+  formatContents: Map<string, any>;
 }
 
 const globalForMemory = globalThis as unknown as {
@@ -73,6 +80,48 @@ function initMemoryStore(): MemoryStorage {
       socialLinks: {},
       updatedAt: new Date(),
     },
+    navigationItems: new Map(),
+    footerSettings: new Map([
+      ['default', {
+        id: 'default',
+        brandDescription: 'Fast, privacy-focused image and PDF utility tools. Process files safely in your browser without registration or uploads.',
+        copyrightText: '© 2026 Convert24. Free online file utility service. All rights reserved.',
+        trustText: 'Client-side processing • 100% Free • No registration',
+        linksJson: [
+          {
+            title: "Tools & Converters",
+            links: [
+              { label: "Image Tools", href: "/image-tools" },
+              { label: "PDF Tools", href: "/pdf-tools" },
+              { label: "JPG to PNG", href: "/tools/jpg-to-png" },
+              { label: "Compress Image", href: "/tools/compress-image" },
+              { label: "Merge PDF", href: "/tools/merge-pdf" }
+            ]
+          },
+          {
+            title: "Formats & Guides",
+            links: [
+              { label: "JPG Format Guide", href: "/formats/jpg" },
+              { label: "PNG Format Guide", href: "/formats/png" },
+              { label: "WEBP Format Guide", href: "/formats/webp" },
+              { label: "PDF Format Guide", href: "/formats/pdf" },
+              { label: "Blog & Tutorials", href: "/blog" }
+            ]
+          },
+          {
+            title: "About & Legal",
+            links: [
+              { label: "About Us", href: "/about" },
+              { label: "Privacy Policy", href: "/privacy" },
+              { label: "Terms of Service", href: "/terms" },
+              { label: "Contact", href: "/contact" }
+            ]
+          }
+        ],
+        updatedAt: new Date(),
+      }]
+    ]),
+    formatContents: new Map(),
   };
   globalForMemory.__filetools_memory_store__ = store;
   return store;
@@ -211,6 +260,60 @@ function seedDefaultData() {
       updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     });
   }
+
+  // Seed default navigation items
+  const defaultNavs = [
+    { id: 'nav-blog', menu: 'header', label: 'Blog', destination: '/blog', order: 2, visible: true, icon: 'BookOpen', isExternal: false, openNewTab: false },
+    { id: 'nav-pricing', menu: 'header', label: 'Pricing', destination: '/#pricing', order: 3, visible: true, icon: 'DollarSign', isExternal: false, openNewTab: false },
+    { id: 'nav-help', menu: 'header', label: 'Help', destination: '/#faq', order: 4, visible: true, icon: 'HelpCircle', isExternal: false, openNewTab: false },
+  ];
+  for (const n of defaultNavs) {
+    memoryStore.navigationItems.set(n.id, {
+      ...n,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+
+  // Seed default footer settings
+  memoryStore.footerSettings.set('default', {
+    id: 'default',
+    brandDescription: 'Fast, privacy-focused image and PDF utility tools. Process files safely in your browser without registration or uploads.',
+    copyrightText: '© 2026 Convert24. Free online file utility service. All rights reserved.',
+    trustText: 'Client-side processing • 100% Free • No registration',
+    linksJson: [
+      {
+        title: "Tools & Converters",
+        links: [
+          { label: "Image Tools", href: "/image-tools" },
+          { label: "PDF Tools", href: "/pdf-tools" },
+          { label: "JPG to PNG", href: "/tools/jpg-to-png" },
+          { label: "Compress Image", href: "/tools/compress-image" },
+          { label: "Merge PDF", href: "/tools/merge-pdf" }
+        ]
+      },
+      {
+        title: "Formats & Guides",
+        links: [
+          { label: "JPG Format Guide", href: "/formats/jpg" },
+          { label: "PNG Format Guide", href: "/formats/png" },
+          { label: "WEBP Format Guide", href: "/formats/webp" },
+          { label: "PDF Format Guide", href: "/formats/pdf" },
+          { label: "Blog & Tutorials", href: "/blog" }
+        ]
+      },
+      {
+        title: "About & Legal",
+        links: [
+          { label: "About Us", href: "/about" },
+          { label: "Privacy Policy", href: "/privacy" },
+          { label: "Terms of Service", href: "/terms" },
+          { label: "Contact", href: "/contact" }
+        ]
+      }
+    ],
+    updatedAt: new Date(),
+  });
 }
 
 function attachBlogPostRelations(post: any, include?: any) {
@@ -372,17 +475,48 @@ export const memoryDb = {
     },
     async findFirst({ where }: { where?: any }) {
       for (const u of memoryStore.adminUsers.values()) {
+        if (where?.id && u.id !== where.id) continue;
         if (where?.email && u.email.toLowerCase() !== where.email.toLowerCase()) continue;
         if (where?.isActive !== undefined && u.isActive !== where.isActive) continue;
+        if (where?.role && u.role !== where.role) continue;
+        if (where?.passwordResetTokenHash && u.passwordResetTokenHash !== where.passwordResetTokenHash) continue;
         return { ...u };
       }
       return null;
     },
-    async findMany({ where, orderBy }: { where?: any; orderBy?: any } = {}) {
+    async findMany({ where, orderBy, take, skip }: { where?: any; orderBy?: any; take?: number; skip?: number } = {}) {
       let list = Array.from(memoryStore.adminUsers.values());
       if (where?.role) list = list.filter((u) => u.role === where.role);
       if (where?.isActive !== undefined) list = list.filter((u) => u.isActive === where.isActive);
-      return list;
+      if (where?.OR && Array.isArray(where.OR)) {
+        list = list.filter((u) => {
+          return where.OR.some((cond: any) => {
+            if (cond.name?.contains) return u.name?.toLowerCase().includes(cond.name.contains.toLowerCase());
+            if (cond.email?.contains) return u.email?.toLowerCase().includes(cond.email.contains.toLowerCase());
+            return false;
+          });
+        });
+      }
+      if (orderBy) {
+        if (orderBy.createdAt === 'desc') {
+          list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        } else if (orderBy.createdAt === 'asc') {
+          list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        } else if (orderBy.name === 'asc') {
+          list.sort((a, b) => a.name.localeCompare(b.name));
+        } else if (orderBy.name === 'desc') {
+          list.sort((a, b) => b.name.localeCompare(a.name));
+        } else if (orderBy.email === 'asc') {
+          list.sort((a, b) => a.email.localeCompare(b.email));
+        } else if (orderBy.lastLoginAt === 'desc') {
+          list.sort((a, b) => new Date(b.lastLoginAt || 0).getTime() - new Date(a.lastLoginAt || 0).getTime());
+        }
+      } else {
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }
+      if (skip) list = list.slice(skip);
+      if (take) list = list.slice(0, take);
+      return list.map((u) => ({ ...u }));
     },
     async create({ data }: { data: any }) {
       const id = data.id || `admin-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
@@ -394,8 +528,12 @@ export const memoryDb = {
         role: data.role || 'EDITOR',
         isActive: data.isActive !== undefined ? data.isActive : true,
         lastLoginAt: data.lastLoginAt || null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        failedLoginAttempts: data.failedLoginAttempts || 0,
+        lockedUntil: data.lockedUntil || null,
+        passwordResetTokenHash: data.passwordResetTokenHash || null,
+        passwordResetExpiresAt: data.passwordResetExpiresAt || null,
+        createdAt: data.createdAt || new Date(),
+        updatedAt: data.updatedAt || new Date(),
       };
       memoryStore.adminUsers.set(id, user);
       return { ...user };
@@ -411,8 +549,22 @@ export const memoryDb = {
       memoryStore.adminUsers.set(where.id, updated);
       return { ...updated };
     },
-    async count() {
-      return memoryStore.adminUsers.size;
+    async delete({ where }: { where: { id: string } }) {
+      const existing = memoryStore.adminUsers.get(where.id);
+      if (existing) {
+        memoryStore.adminUsers.delete(where.id);
+      }
+      return existing;
+    },
+    async count({ where }: { where?: any } = {}) {
+      if (!where) return memoryStore.adminUsers.size;
+      let count = 0;
+      for (const u of memoryStore.adminUsers.values()) {
+        if (where.role && u.role !== where.role) continue;
+        if (where.isActive !== undefined && u.isActive !== where.isActive) continue;
+        count++;
+      }
+      return count;
     },
   },
 
@@ -827,6 +979,98 @@ export const memoryDb = {
         updatedAt: new Date(),
       };
       return { ...memoryStore.globalSettings };
+    },
+  },
+
+  navigationItem: {
+    async findUnique({ where }: { where: { id: string } }) {
+      return memoryStore.navigationItems.get(where.id) || null;
+    },
+    async findMany({ where, orderBy }: { where?: any; orderBy?: any } = {}) {
+      let list = Array.from(memoryStore.navigationItems.values());
+      if (where?.menu) list = list.filter((i) => i.menu === where.menu);
+      if (where?.visible !== undefined) list = list.filter((i) => i.visible === where.visible);
+      
+      if (orderBy?.order === 'asc') {
+        list.sort((a, b) => a.order - b.order);
+      } else if (orderBy?.order === 'desc') {
+        list.sort((a, b) => b.order - a.order);
+      }
+      return list.map((i) => ({ ...i }));
+    },
+    async create({ data }: { data: any }) {
+      const id = data.id || `nav-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+      const now = new Date();
+      const item = {
+        id,
+        menu: data.menu || 'header',
+        label: data.label,
+        destination: data.destination,
+        order: data.order || 0,
+        visible: data.visible !== undefined ? data.visible : true,
+        icon: data.icon || null,
+        isExternal: data.isExternal || false,
+        openNewTab: data.openNewTab || false,
+        createdAt: now,
+        updatedAt: now,
+      };
+      memoryStore.navigationItems.set(id, item);
+      return { ...item };
+    },
+    async update({ where, data }: { where: { id: string }; data: any }) {
+      const existing = memoryStore.navigationItems.get(where.id);
+      if (!existing) throw new Error(`NavigationItem not found: ${where.id}`);
+      const updated = {
+        ...existing,
+        ...data,
+        updatedAt: new Date(),
+      };
+      memoryStore.navigationItems.set(where.id, updated);
+      return { ...updated };
+    },
+    async delete({ where }: { where: { id: string } }) {
+      const existing = memoryStore.navigationItems.get(where.id);
+      if (existing) {
+        memoryStore.navigationItems.delete(where.id);
+      }
+      return existing;
+    },
+  },
+
+  footerSettings: {
+    async findUnique({ where }: { where: { id: string } }) {
+      const id = where.id || 'default';
+      const existing = memoryStore.footerSettings.get(id);
+      if (!existing) {
+        // Return default fallback
+        return {
+          id: 'default',
+          brandDescription: 'Fast, privacy-focused image and PDF utility tools. Process files safely in your browser without registration or uploads.',
+          copyrightText: '© 2026 Convert24. Free online file utility service. All rights reserved.',
+          trustText: 'Client-side processing • 100% Free • No registration',
+          linksJson: [],
+          updatedAt: new Date(),
+        };
+      }
+      return { ...existing };
+    },
+    async update({ where, data }: { where: { id: string }; data: any }) {
+      const id = where.id || 'default';
+      const existing = memoryStore.footerSettings.get(id) || { id, createdAt: new Date() };
+      const updated = {
+        ...existing,
+        ...data,
+        updatedAt: new Date(),
+      };
+      memoryStore.footerSettings.set(id, updated);
+      return { ...updated };
+    },
+    async upsert({ where, create, update }: { where: { id: string }; create: any; update: any }) {
+      const id = where.id || 'default';
+      const existing = memoryStore.footerSettings.get(id);
+      const target = existing ? { ...existing, ...update, updatedAt: new Date() } : { id, ...create, createdAt: new Date(), updatedAt: new Date() };
+      memoryStore.footerSettings.set(id, target);
+      return { ...target };
     },
   },
 
@@ -1525,5 +1769,8 @@ export function resetMemoryDb() {
   memoryStore.postRevisions = [];
   memoryStore.mediaAssets.clear();
   memoryStore.auditLogs = [];
+  memoryStore.navigationItems.clear();
+  memoryStore.footerSettings.clear();
+  memoryStore.formatContents.clear();
   seedDefaultData();
 }

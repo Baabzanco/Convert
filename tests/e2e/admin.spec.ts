@@ -47,6 +47,10 @@ test.describe('Admin CMS Phase 01 — End-to-End Tests', () => {
     await expect(aside.getByRole('link', { name: 'Tools', exact: true })).toBeVisible();
     await expect(aside.getByRole('link', { name: 'Settings', exact: true })).toBeVisible();
 
+    // Verify left sidebar is fixed positioned
+    const asidePosition = await aside.evaluate((el) => window.getComputedStyle(el).position);
+    expect(asidePosition).toBe('fixed');
+
     // Navigate to Pages CMS
     await aside.getByRole('link', { name: 'Pages', exact: true }).click();
     await expect(page).toHaveURL(/\/admin\/pages/);
