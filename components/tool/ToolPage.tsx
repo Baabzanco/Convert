@@ -254,6 +254,79 @@ function CmsToolBlock({ block, tool }: { block: any; tool: ToolDefinition }) {
         </section>
       );
 
+    case 'section':
+      return (
+        <section className="py-10 border-t border-[#E4E2F0]">
+          <div className="max-w-4xl space-y-2">
+            {content.title && (
+              <h2 className="text-2xl md:text-3xl font-extrabold text-[#0F112E] tracking-tight">
+                {content.title}
+              </h2>
+            )}
+            {content.description && (
+              <p className="text-base text-[#5E6488] leading-relaxed">{content.description}</p>
+            )}
+          </div>
+        </section>
+      );
+
+    case 'heading': {
+      const Tag = content.level === 1 ? 'h1' : content.level === 3 ? 'h3' : 'h2';
+      const classes =
+        content.level === 1
+          ? "text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#0F112E] tracking-tight"
+          : content.level === 3
+          ? "text-xl font-bold text-[#0F112E]"
+          : "text-2xl md:text-3xl font-extrabold text-[#0F112E] tracking-tight";
+      return <Tag className={`${classes} my-4`}>{content.text}</Tag>;
+    }
+
+    case 'paragraph':
+      return <p className="text-base text-[#5E6488] leading-relaxed my-3">{content.text}</p>;
+
+    case 'rich_text':
+      return (
+        <div
+          className="text-base text-[#5E6488] leading-relaxed space-y-3 my-3"
+          dangerouslySetInnerHTML={{ __html: content.html || '' }}
+        />
+      );
+
+    case 'image':
+      return (
+        <figure className="my-6">
+          <img
+            src={content.src}
+            alt={content.alt || ''}
+            className="rounded-2xl border border-[#E4E2F0] max-h-[400px] object-cover"
+          />
+          {content.caption && (
+            <figcaption className="text-xs text-[#5E6488] mt-2 text-center">{content.caption}</figcaption>
+          )}
+        </figure>
+      );
+
+    case 'link':
+      return (
+        <Link
+          href={content.href || '#'}
+          target={content.isExternal ? "_blank" : undefined}
+          rel={content.isExternal ? "noopener noreferrer" : undefined}
+          className="text-[#7C3AED] hover:text-[#6D28D9] font-semibold underline inline-flex items-center gap-1 my-1"
+        >
+          <span>{content.text}</span>
+          {content.isExternal && <ArrowLeft className="w-3 h-3 rotate-180" />}
+        </Link>
+      );
+
+    case 'feature':
+      return (
+        <div className="p-6 bg-[#FFFFFF] border border-[#E4E2F0] rounded-[20px] space-y-3 hover:border-[#7C3AED]/40 transition-colors shadow-sm my-4 max-w-md">
+          <h3 className="font-bold text-base text-[#0F112E]">{content.title}</h3>
+          <p className="text-sm text-[#5E6488] leading-relaxed">{content.description}</p>
+        </div>
+      );
+
     case 'spacer':
       return <div style={{ height: `${content.height || 24}px` }} />;
 
