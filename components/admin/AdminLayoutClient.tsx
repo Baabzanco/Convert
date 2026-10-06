@@ -44,13 +44,17 @@ export function AdminLayoutClient({ children }: AdminLayoutClientProps) {
           setIsLoading(false);
         }
 
-        // Fetch DB status from dashboard stats
-        const dashRes = await fetch('/api/admin/dashboard');
-        if (dashRes.ok) {
-          const dashData = await dashRes.json();
-          if (isMounted && dashData.stats?.databaseStatus) {
-            setDbStatus(dashData.stats.databaseStatus);
+        // Fetch DB status non-blockingly; do NOT let dashboard stats errors affect the authenticated session
+        try {
+          const dashRes = await fetch('/api/admin/dashboard');
+          if (dashRes.ok) {
+            const dashData = await dashRes.json();
+            if (isMounted && dashData.stats?.databaseStatus) {
+              setDbStatus(dashData.stats.databaseStatus);
+            }
           }
+        } catch {
+          // Ignore background status polling errors
         }
       } catch {
         if (isMounted) {

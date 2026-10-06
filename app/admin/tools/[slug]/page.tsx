@@ -2220,7 +2220,9 @@ export default function AdminToolEditor({ params }: ToolEditorProps) {
                       const serialized = serializeBlockForClipboard(block);
                       try {
                         navigator.clipboard.writeText(serialized);
-                      } catch {}
+                      } catch {
+                        // ignore clipboard write failure
+                      }
                       localStorage.setItem('cms_block_clipboard', serialized);
                       setStatusMessage({ type: 'success', text: `Copied block "${block.type}" to local clipboard.` });
                     }}

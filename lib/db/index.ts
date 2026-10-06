@@ -1656,14 +1656,46 @@ function isConnectionError(err: any): boolean {
   const code = err.code || '';
   return (
     err.name === 'PrismaClientInitializationError' ||
-    (err.name === 'PrismaClientKnownRequestError' && (code === 'P1001' || code === 'P1000' || code === 'P1003')) ||
-    code === 'P1001' ||
+    err.name === 'PrismaClientRustPanicError' ||
+    err.name === 'PrismaClientUnknownRequestError' ||
+    (err.name === 'PrismaClientKnownRequestError' && (
+      code === 'P1000' ||
+      code === 'P1001' ||
+      code === 'P1002' ||
+      code === 'P1003' ||
+      code === 'P1008' ||
+      code === 'P1011' ||
+      code === 'P1017' ||
+      code === 'P2021' ||
+      code === 'P2022' ||
+      code === 'P2024'
+    )) ||
     code === 'P1000' ||
+    code === 'P1001' ||
+    code === 'P1002' ||
     code === 'P1003' ||
+    code === 'P1008' ||
+    code === 'P1011' ||
+    code === 'P1017' ||
+    code === 'P2021' ||
+    code === 'P2022' ||
+    code === 'P2024' ||
     msg.includes("Can't reach database server") ||
     msg.includes('connection refused') ||
     msg.includes('ECONNREFUSED') ||
-    msg.includes('ETIMEDOUT')
+    msg.includes('ECONNRESET') ||
+    msg.includes('ETIMEDOUT') ||
+    msg.includes('EHOSTUNREACH') ||
+    msg.includes('ENOTFOUND') ||
+    msg.includes('EAI_AGAIN') ||
+    msg.includes('Connection terminated') ||
+    msg.includes('Connection lost') ||
+    msg.includes('Connection closed') ||
+    msg.includes('timed out') ||
+    msg.includes('timeout') ||
+    msg.includes('SSL SYSCALL') ||
+    msg.includes('ConnectionPoolTimeout') ||
+    msg.includes('database server is not reachable')
   );
 }
 

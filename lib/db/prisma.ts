@@ -58,7 +58,7 @@ function createPrismaClient(): PrismaClient {
   } catch (err) {
     console.warn('[Prisma] Failed to initialize PrismaClient instance:', err);
     return new Proxy({} as PrismaClient, {
-      get(_target, prop) {
+      get(_target, _prop) {
         throw err;
       },
     });
@@ -67,6 +67,4 @@ function createPrismaClient(): PrismaClient {
 
 export const prisma: PrismaClient = createPrismaClient();
 
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-}
+globalForPrisma.prisma = prisma;

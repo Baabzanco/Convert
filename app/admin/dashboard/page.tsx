@@ -26,6 +26,10 @@ export default function AdminDashboardPage() {
     setError(null);
     try {
       const res = await fetch('/api/admin/dashboard');
+      if (res.status === 401 || res.status === 403) {
+        setError('Administrative session expired or unauthorized. Please refresh or sign in again.');
+        return;
+      }
       if (!res.ok) {
         throw new Error('Failed to load dashboard statistics.');
       }

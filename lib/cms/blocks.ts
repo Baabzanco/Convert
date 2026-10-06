@@ -56,7 +56,7 @@ export function normalizeBlock(block: any, defaultOrder = 0): UniversalContentBl
 
   const id = block.id || `blk-${Math.random().toString(36).substring(2, 9)}`;
   
-  let type: ContentBlockType = 'paragraph';
+  let type: ContentBlockType;
   const rawType = String(block.type || 'paragraph').toLowerCase();
 
   const validTypes: ContentBlockType[] = [

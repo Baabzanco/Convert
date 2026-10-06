@@ -48,13 +48,17 @@ export async function verifySessionToken(token: string): Promise<AdminUserSessio
   }
 }
 
+const isCookieSecure =
+  process.env.COOKIE_SECURE === 'true' ||
+  (process.env.NODE_ENV === 'production' && process.env.COOKIE_SECURE !== 'false');
+
 /**
  * Cookie options for the admin session.
  */
 export const sessionCookieOptions = {
   name: ADMIN_COOKIE_NAME,
   httpOnly: true,
-  secure: process.env.NODE_ENV === 'production',
+  secure: isCookieSecure,
   sameSite: 'lax' as const,
   path: '/',
   maxAge: SESSION_DURATION_SECONDS,

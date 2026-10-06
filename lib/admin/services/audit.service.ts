@@ -76,27 +76,47 @@ export async function getAuditLogs(options?: {
   if (options?.userId) where.userId = options.userId;
   if (options?.entityType) where.entityType = options.entityType;
 
-  const [rawLogs, total] = await Promise.all([
-    db.auditLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-      skip: offset,
-    }),
-    db.auditLog.count({ where }),
-  ]);
+  try {
+    const [rawLogs, total] = await Promise.all([
+      db.auditLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      }),
+      db.auditLog.count({ where }),
+    ]);
 
-  const logs: AuditLogItem[] = rawLogs.map((l: any) => ({
-    id: l.id,
-    userId: l.userId,
-    userName: l.user?.name || null,
-    userEmail: l.user?.email || null,
-    action: l.action,
-    entityType: l.entityType,
-    entityId: l.entityId,
-    metadata: l.metadata,
-    createdAt: l.createdAt instanceof Date ? l.createdAt.toISOString() : new Date(l.createdAt).toISOString(),
-  }));
+    const logs: AuditLogItem[] = (rawLogs || []).map((l: any) => {
+      let createdAtStr: string;
+      try {
+        if (l.createdAt instanceof Date) {
+          createdAtStr = l.createdAt.toISOString();
+        } else if (l.createdAt) {
+          createdAtStr = new Date(l.createdAt).toISOString();
+        } else {
+          createdAtStr = new Date().toISOString();
+        }
+      } catch {
+        createdAtStr = new Date().toISOString();
+      }
 
-  return { logs, total };
+      return {
+        id: l.id || '',
+        userId: l.userId || null,
+        userName: l.user?.name || null,
+        userEmail: l.user?.email || null,
+        action: l.action || 'UNKNOWN',
+        entityType: l.entityType || 'SYSTEM',
+        entityId: l.entityId || null,
+        metadata: l.metadata || null,
+        createdAt: createdAtStr,
+      };
+    });
+
+    return { logs, total: typeof total === 'number' ? total : logs.length };
+  } catch (err: unknown) {
+    console.warn('[Audit Service] getAuditLogs error:', err);
+    return { logs: [], total: 0 };
+  }
 }
