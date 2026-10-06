@@ -40,6 +40,7 @@ import {
   serializeBlockForClipboard,
   deserializeAndPasteBlock
 } from '@/lib/cms/blocks';
+import { isBatch1Tool, getBatch1ToolBlocks } from '@/lib/cms/tool-blocks-batch1';
 import {
   ChevronUp,
   ChevronDown,
@@ -143,6 +144,10 @@ function CmsBlockEditorItem({
         return `Link: "${content.text || 'Untitled'}" → ${content.href || '#'}`;
       case 'spacer':
         return `Spacer: ${content.height || 24}px`;
+      case 'privacy_note':
+        return `Privacy Notice: "${content.title || 'Protected'}"`;
+      case 'use_cases':
+        return `Use Cases (${(content.items || []).length} cases)`;
       default:
         return `${block.type.toUpperCase()} block`;
     }
@@ -1186,6 +1191,147 @@ function CmsBlockEditorItem({
               />
             </div>
           )}
+
+          {block.type === 'privacy_note' && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Privacy Notice Title</label>
+                <input
+                  type="text"
+                  value={content.title || ''}
+                  onChange={(e) => onUpdateContent({ ...content, title: e.target.value })}
+                  placeholder="e.g. Your Files Stay Private on Your Device"
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Privacy Description</label>
+                <textarea
+                  rows={3}
+                  value={content.description || ''}
+                  onChange={(e) => onUpdateContent({ ...content, description: e.target.value })}
+                  placeholder="Privacy commitment description..."
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-1">Bullet Points (One per line)</label>
+                <textarea
+                  rows={3}
+                  value={Array.isArray(content.bullets) ? content.bullets.join('\n') : ''}
+                  onChange={(e) =>
+                    onUpdateContent({
+                      ...content,
+                      bullets: e.target.value.split('\n').filter((l: string) => l.trim().length > 0),
+                    })
+                  }
+                  placeholder="Zero server uploads...\nNo telemetry...\nAutomatic cleanup..."
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-lg"
+                />
+              </div>
+            </div>
+          )}
+
+          {block.type === 'use_cases' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pb-2 border-b">
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Section Title</label>
+                  <input
+                    type="text"
+                    value={content.heading || ''}
+                    onChange={(e) => onUpdateContent({ ...content, heading: e.target.value })}
+                    placeholder="e.g. Common Use Cases"
+                    className="w-full px-2.5 py-1.2 text-xs border rounded-lg focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-slate-500 mb-0.5">Section Description</label>
+                  <input
+                    type="text"
+                    value={content.description || ''}
+                    onChange={(e) => onUpdateContent({ ...content, description: e.target.value })}
+                    placeholder="e.g. Practical scenarios where this tool saves time..."
+                    className="w-full px-2.5 py-1.2 text-xs border rounded-lg focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-700">Use Case Items</span>
+                <button
+                  onClick={() => {
+                    const items = content.items || [];
+                    const newItem = {
+                      id: `itm-uc-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                      enabled: true,
+                      title: 'New Use Case',
+                      description: 'Scenario explanation'
+                    };
+                    onUpdateContent({ ...content, items: [...items, newItem] });
+                  }}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#124A57] bg-[#E6F4F1] px-2 py-0.8 rounded hover:bg-[#D1EBE5]"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Add Use Case</span>
+                </button>
+              </div>
+
+              {(content.items || []).length === 0 ? (
+                <p className="text-slate-400 italic text-center py-4 bg-slate-50 rounded-lg">No use cases added yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {(content.items || []).map((item: any, sIdx: number) => (
+                    <div key={item.id || sIdx} className="p-3 bg-slate-50 border rounded-lg space-y-2 relative">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-700">Case #{sIdx + 1}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              const items = content.items.filter((_: any, i: number) => i !== sIdx);
+                              onUpdateContent({ ...content, items });
+                            }}
+                            className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded shrink-0"
+                            title="Delete case"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Title</label>
+                          <input
+                            type="text"
+                            value={item.title || ''}
+                            onChange={(e) => {
+                              const items = [...content.items];
+                              items[sIdx] = { ...items[sIdx], title: e.target.value };
+                              onUpdateContent({ ...content, items });
+                            }}
+                            className="w-full px-2 py-1.5 border rounded bg-white text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">Description</label>
+                          <input
+                            type="text"
+                            value={item.description || ''}
+                            onChange={(e) => {
+                              const items = [...content.items];
+                              items[sIdx] = { ...items[sIdx], description: e.target.value };
+                              onUpdateContent({ ...content, items });
+                            }}
+                            className="w-full px-2 py-1.5 border rounded bg-white text-xs"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1920,6 +2066,20 @@ export default function AdminToolEditor({ params }: ToolEditorProps) {
                     Pre-populate defaults (PNG to JPG)
                   </button>
                 )}
+                {isBatch1Tool(slug) && blocks.length === 0 && (
+                  <button
+                    onClick={() => {
+                      const defaultBlocks = getBatch1ToolBlocks(slug);
+                      if (defaultBlocks) {
+                        setBlocks(defaultBlocks);
+                        setStatusMessage({ type: 'success', text: `Pre-populated with high-fidelity canonical content blocks for ${slug}.` });
+                      }
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold text-[#124A57] bg-[#E6F4F1] hover:bg-[#D1EBE5] rounded-lg transition-colors border border-[#124A57]/10"
+                  >
+                    Pre-populate defaults ({canonical?.name || slug})
+                  </button>
+                )}
                 <button
                   onClick={async () => {
                     try {
@@ -1981,6 +2141,8 @@ export default function AdminToolEditor({ params }: ToolEditorProps) {
                     <option value="rich_text">HTML / Rich Text</option>
                     <option value="image">Image Element</option>
                     <option value="link">Anchor Link</option>
+                    <option value="privacy_note">Privacy Notice</option>
+                    <option value="use_cases">Use Cases Grid</option>
                     <option value="spacer">Blank Spacer</option>
                   </select>
                   <button
@@ -2007,7 +2169,7 @@ export default function AdminToolEditor({ params }: ToolEditorProps) {
                 <p className="text-[11px] text-[#64748B] max-w-md mx-auto">
                   By default, this tool page runs on hardcoded canonical layouts. Enable blocks to take complete content control.
                 </p>
-                {slug === 'png-to-jpg' && (
+                {(slug === 'png-to-jpg' || isBatch1Tool(slug)) && (
                   <button
                     onClick={() => {
                       document.getElementById('add-block-select')?.scrollIntoView({ behavior: 'smooth' });

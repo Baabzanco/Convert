@@ -1,5 +1,6 @@
 import { getDb } from '@/lib/db';
 import { getToolBySlug, getAllTools, ToolDefinition } from '@/lib/tools';
+import { isBatch1Tool, getBatch1ToolBlocks } from '@/lib/cms/tool-blocks-batch1';
 import { UpdateToolContentInput, AdminUserSession } from '../types';
 import { createAuditLog } from './audit.service';
 import { validateToolPayload } from '../validation';
@@ -32,43 +33,57 @@ export async function getMergedTool(
     });
 
     const isPreview = options?.preview === true;
-    if (!override || (!override.isPublished && !isPreview)) {
-      return canonical;
+    if (override) {
+      if (!override.isPublished && !isPreview) {
+        return canonical;
+      }
+
+      // Overlay CMS overrides with clean partial precedence
+      const customHowTo = Array.isArray(override.customHowTo) && override.customHowTo.length > 0
+        ? (override.customHowTo as any)
+        : canonical.howTo;
+
+      const customFeatures = Array.isArray(override.customFeatures) && override.customFeatures.length > 0
+        ? (override.customFeatures as any)
+        : canonical.features;
+
+      const customFaq = Array.isArray(override.customFaq) && override.customFaq.length > 0
+        ? (override.customFaq as any)
+        : canonical.faq;
+
+      const customRelatedTools = Array.isArray(override.customRelatedTools) && override.customRelatedTools.length > 0
+        ? (override.customRelatedTools as any)
+        : canonical.relatedTools;
+
+      const mergedTitle = override.seo?.seoTitle || override.customTitle || canonical.title;
+      const mergedDesc = override.seo?.metaDescription || override.customDescription || canonical.description;
+      const customBlocks = override.blocks ? (override.blocks as any[]) : getBatch1ToolBlocks(slug) || undefined;
+
+      return {
+        ...canonical,
+        title: mergedTitle,
+        description: mergedDesc,
+        h1: override.customH1 || canonical.h1,
+        intro: override.customIntro || canonical.intro,
+        valueProposition: override.customValueProp || canonical.valueProposition,
+        howTo: customHowTo,
+        features: customFeatures,
+        faq: customFaq,
+        relatedTools: customRelatedTools,
+        blocks: customBlocks,
+      };
     }
 
-    // Overlay CMS overrides with clean partial precedence
-    const customHowTo = Array.isArray(override.customHowTo) && override.customHowTo.length > 0
-      ? (override.customHowTo as any)
-      : canonical.howTo;
+    // When no DB override exists, Batch 1 tools default to structured blocks
+    const batch1Blocks = getBatch1ToolBlocks(slug);
+    if (batch1Blocks) {
+      return {
+        ...canonical,
+        blocks: batch1Blocks,
+      };
+    }
 
-    const customFeatures = Array.isArray(override.customFeatures) && override.customFeatures.length > 0
-      ? (override.customFeatures as any)
-      : canonical.features;
-
-    const customFaq = Array.isArray(override.customFaq) && override.customFaq.length > 0
-      ? (override.customFaq as any)
-      : canonical.faq;
-
-    const customRelatedTools = Array.isArray(override.customRelatedTools) && override.customRelatedTools.length > 0
-      ? (override.customRelatedTools as any)
-      : canonical.relatedTools;
-
-    const mergedTitle = override.seo?.seoTitle || override.customTitle || canonical.title;
-    const mergedDesc = override.seo?.metaDescription || override.customDescription || canonical.description;
-
-    return {
-      ...canonical,
-      title: mergedTitle,
-      description: mergedDesc,
-      h1: override.customH1 || canonical.h1,
-      intro: override.customIntro || canonical.intro,
-      valueProposition: override.customValueProp || canonical.valueProposition,
-      howTo: customHowTo,
-      features: customFeatures,
-      faq: customFaq,
-      relatedTools: customRelatedTools,
-      blocks: override.blocks ? (override.blocks as any[]) : undefined,
-    };
+    return canonical;
   } catch {
     return canonical;
   }
@@ -86,6 +101,39 @@ export async function getToolContentBySlug(slug: string) {
     where: { toolSlug: slug },
     include: { seo: true },
   });
+
+  if (!override) {
+    const batch1Blocks = getBatch1ToolBlocks(slug);
+    if (batch1Blocks) {
+      return {
+        canonical,
+        override: {
+          id: `tc-b1-${slug}`,
+          toolSlug: slug,
+          customTitle: null,
+          customH1: null,
+          customIntro: null,
+          customDescription: null,
+          customValueProp: null,
+          customHowTo: null,
+          customFeatures: null,
+          customFaq: null,
+          customRelatedTools: null,
+          blocks: batch1Blocks,
+          isPublished: true,
+          createdAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+          seo: {
+            seoTitle: canonical.title,
+            metaDescription: canonical.description,
+            canonicalUrl: `/tools/${slug}`,
+            robotsIndex: true,
+            robotsFollow: true,
+          },
+        } as any,
+      };
+    }
+  }
 
   return {
     canonical,
@@ -106,14 +154,15 @@ export async function getAllToolContents() {
 
   return canonicalTools.map((t) => {
     const override = overridesBySlug.get(t.slug);
+    const isB1 = isBatch1Tool(t.slug);
     return {
       slug: t.slug,
       name: t.name,
       category: t.category,
       inputFormats: t.inputFormats,
       outputFormats: t.outputFormats,
-      hasCmsOverride: Boolean(override),
-      isPublished: override?.isPublished || false,
+      hasCmsOverride: Boolean(override) || isB1,
+      isPublished: override ? override.isPublished : (isB1 ? true : false),
       customTitle: override?.customTitle || null,
       customH1: override?.customH1 || null,
       updatedAt: override?.updatedAt || null,

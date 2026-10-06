@@ -8,10 +8,17 @@ export type ContentBlockType =
   | 'link'
   | 'cta'
   | 'feature'
+  | 'features'
+  | 'how_to_use'
+  | 'how_to'
+  | 'related_tools'
   | 'benefits_trust'
+  | 'intro'
   | 'faq'
   | 'tool_ref'
   | 'cards'
+  | 'privacy_note'
+  | 'use_cases'
   | 'spacer';
 
 export interface UniversalContentBlock {
@@ -62,10 +69,17 @@ export function normalizeBlock(block: any, defaultOrder = 0): UniversalContentBl
     'link',
     'cta',
     'feature',
+    'features',
+    'how_to_use',
+    'how_to',
+    'related_tools',
     'benefits_trust',
+    'intro',
     'faq',
     'tool_ref',
     'cards',
+    'privacy_note',
+    'use_cases',
     'spacer',
   ];
 
@@ -119,6 +133,18 @@ export function normalizeBlock(block: any, defaultOrder = 0): UniversalContentBl
     } else if (type === 'section') {
       content.title = String(rootOrData.title || '').trim();
       content.description = rootOrData.description ? String(rootOrData.description).trim() : undefined;
+    } else if (type === 'intro') {
+      content.heading = String(rootOrData.heading || '').trim();
+      content.text = String(rootOrData.text || '').trim();
+      if (rootOrData.html) content.html = String(rootOrData.html).trim();
+    } else if (type === 'privacy_note') {
+      content.title = String(rootOrData.title || '').trim();
+      content.description = String(rootOrData.description || '').trim();
+      content.bullets = Array.isArray(rootOrData.bullets) ? rootOrData.bullets : [];
+    } else if (type === 'use_cases') {
+      content.heading = String(rootOrData.heading || '').trim();
+      content.description = rootOrData.description ? String(rootOrData.description).trim() : undefined;
+      content.items = Array.isArray(rootOrData.items) ? rootOrData.items : [];
     } else {
       // General fallback copy of root fields
       const ignoreKeys = ['id', 'type', 'enabled', 'order', 'settings', 'content', 'data'];

@@ -327,6 +327,83 @@ function CmsToolBlock({ block, tool }: { block: any; tool: ToolDefinition }) {
         </div>
       );
 
+    case 'privacy_note':
+      return (
+        <section className="py-10 border-t border-[#E4E2F0]" aria-labelledby="privacy-heading">
+          <div className="p-6 md:p-8 bg-gradient-to-br from-[#FAF9FF] to-[#FFFFFF] border border-[#E4E2F0] rounded-[24px] shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-[#7C3AED] text-white flex items-center justify-center flex-shrink-0 mt-1 shadow-md shadow-indigo-100">
+                <ShieldCheck className="w-6 h-6 text-white" aria-hidden="true" />
+              </div>
+              <div className="space-y-3 flex-1">
+                <h2 id="privacy-heading" className="text-xl md:text-2xl font-bold text-[#0F112E]">
+                  {content.title || tool.privacyNote?.title || 'Your Privacy is Fully Protected'}
+                </h2>
+                <p className="text-sm md:text-base text-[#5E6488] leading-relaxed">
+                  {content.description ||
+                    tool.privacyNote?.description ||
+                    'Your files are processed directly in your browser and do not need to be uploaded to our servers. Conversions execute locally on your device in temporary memory.'}
+                </p>
+
+                {((content.bullets && content.bullets.length > 0) || (tool.privacyNote?.bullets && tool.privacyNote.bullets.length > 0)) && (
+                  <ul className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                    {(content.bullets || tool.privacyNote?.bullets || []).map((bullet: string, idx: number) => (
+                      <li key={idx} className="flex items-start gap-2 text-xs md:text-sm text-[#5E6488]">
+                        <CheckCircle2 className="w-4 h-4 text-[#7C3AED] flex-shrink-0 mt-0.5" aria-hidden="true" />
+                        <span>{bullet}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+
+    case 'use_cases': {
+      const items = content.items || tool.useCases || [];
+      if (items.length === 0) return null;
+      return (
+        <section className="py-10 border-t border-[#E4E2F0]" aria-labelledby="use-cases-heading">
+          <div className="mb-8">
+            <h2 id="use-cases-heading" className="text-2xl md:text-3xl font-extrabold text-[#0F112E] tracking-tight">
+              {content.heading || `Common Use Cases for ${tool.name}`}
+            </h2>
+            <p className="text-sm md:text-base text-[#5E6488] mt-1.5">
+              {content.description || 'Practical scenarios where this tool saves time and streamlines workflows.'}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {items.map((useCase: any, idx: number) => {
+              if (useCase.enabled === false) return null;
+              return (
+                <div
+                  key={useCase.id || idx}
+                  className="p-6 bg-[#FFFFFF] border border-[#E4E2F0] rounded-[20px] space-y-3 hover:border-[#7C3AED]/30 transition-colors shadow-sm"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-[#F4F3FA] border border-[#E4E2F0] text-[#7C3AED] flex items-center justify-center shadow-sm">
+                    {idx === 0 ? (
+                      <Palette className="w-5 h-5" aria-hidden="true" />
+                    ) : idx === 1 ? (
+                      <Globe className="w-5 h-5" aria-hidden="true" />
+                    ) : idx === 2 ? (
+                      <FileText className="w-5 h-5" aria-hidden="true" />
+                    ) : (
+                      <Repeat className="w-5 h-5" aria-hidden="true" />
+                    )}
+                  </div>
+                  <h3 className="font-bold text-base text-[#0F112E]">{useCase.title}</h3>
+                  <p className="text-sm text-[#5E6488] leading-relaxed">{useCase.description}</p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      );
+    }
+
     case 'spacer':
       return <div style={{ height: `${content.height || 24}px` }} />;
 
