@@ -1640,24 +1640,91 @@ export const memoryDb = {
       return existing;
     },
   },
+  formatContent: {
+    async findUnique({ where }: any) {
+      if (where.formatSlug) {
+        for (const record of memoryStore.formatContents.values()) {
+          if (record.formatSlug === where.formatSlug) return { ...record };
+        }
+      }
+      if (where.id) {
+        const record = memoryStore.formatContents.get(where.id);
+        return record ? { ...record } : null;
+      }
+      return null;
+    },
+    async findMany({ where }: any = {}) {
+      const list = Array.from(memoryStore.formatContents.values());
+      return list.map((r) => ({ ...r }));
+    },
+    async upsert({ where, update, create }: any) {
+      let existing: any = null;
+      if (where.formatSlug) {
+        for (const record of memoryStore.formatContents.values()) {
+          if (record.formatSlug === where.formatSlug) {
+            existing = record;
+            break;
+          }
+        }
+      } else if (where.id) {
+        existing = memoryStore.formatContents.get(where.id);
+      }
+      if (existing) {
+        const updated = {
+          ...existing,
+          ...update,
+          updatedAt: new Date(),
+        };
+        memoryStore.formatContents.set(existing.id, updated);
+        return { ...updated };
+      } else {
+        const id = create.id || `fmt-${Date.now()}`;
+        const record = {
+          id,
+          formatSlug: create.formatSlug,
+          customTitle: create.customTitle || null,
+          customDescription: create.customDescription || null,
+          customDetails: create.customDetails || null,
+          customBestFor: create.customBestFor || null,
+          customPros: create.customPros || null,
+          customCons: create.customCons || null,
+          updatedAt: new Date(),
+        };
+        memoryStore.formatContents.set(id, record);
+        return { ...record };
+      }
+    },
+  },
 };
 
 let prismaUnreachable = false;
+let prismaSchemaDrift = false;
 let lastFailureTime = 0;
 const RETRY_INTERVAL_MS = 30000;
 
 export function isPrismaHealthy(): boolean {
-  return shouldUsePrisma() && !prismaUnreachable;
+  return shouldUsePrisma() && !prismaUnreachable && !prismaSchemaDrift;
 }
 
-function isConnectionError(err: any): boolean {
+export function isPrismaSchemaDrift(): boolean {
+  return prismaSchemaDrift;
+}
+
+export function isPrismaUnreachable(): boolean {
+  return prismaUnreachable;
+}
+
+/**
+ * Identifies genuine network/connection failures where the database server cannot be reached.
+ * NOTE: Schema errors (e.g. missing tables/columns P2021/P2022) are intentionally NOT classified as connection errors.
+ */
+export function isConnectionError(err: any): boolean {
   if (!err) return false;
   const msg = typeof err === 'string' ? err : err.message || '';
   const code = err.code || '';
   return (
     err.name === 'PrismaClientInitializationError' ||
     err.name === 'PrismaClientRustPanicError' ||
-    err.name === 'PrismaClientUnknownRequestError' ||
     (err.name === 'PrismaClientKnownRequestError' && (
       code === 'P1000' ||
       code === 'P1001' ||
@@ -1666,8 +1733,6 @@ function isConnectionError(err: any): boolean {
       code === 'P1008' ||
       code === 'P1011' ||
       code === 'P1017' ||
-      code === 'P2021' ||
-      code === 'P2022' ||
       code === 'P2024'
     )) ||
     code === 'P1000' ||
@@ -1677,8 +1742,6 @@ function isConnectionError(err: any): boolean {
     code === 'P1008' ||
     code === 'P1011' ||
     code === 'P1017' ||
-    code === 'P2021' ||
-    code === 'P2022' ||
     code === 'P2024' ||
     msg.includes("Can't reach database server") ||
     msg.includes('connection refused') ||
@@ -1699,6 +1762,32 @@ function isConnectionError(err: any): boolean {
   );
 }
 
+/**
+ * Identifies schema drift errors (e.g. unmigrated tables or columns in PostgreSQL).
+ */
+export function isSchemaError(err: any): boolean {
+  if (!err) return false;
+  const msg = typeof err === 'string' ? err : err.message || '';
+  const code = err.code || '';
+  return (
+    code === 'P2021' || // The table `...` does not exist in the current database.
+    code === 'P2022' || // The column `...` does not exist in the current database.
+    (err.name === 'PrismaClientKnownRequestError' && (code === 'P2021' || code === 'P2022')) ||
+    msg.includes('does not exist in the current database') ||
+    (msg.includes('relation') && msg.includes('does not exist')) ||
+    (msg.includes('column') && msg.includes('does not exist'))
+  );
+}
+
+const WRITE_METHODS = new Set(['create', 'update', 'upsert', 'delete', 'deleteMany', 'updateMany', 'createMany']);
+
+export class DatabasePersistenceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DatabasePersistenceError';
+  }
+}
+
 function createResilientDb(): typeof memoryDb | typeof prisma {
   return new Proxy(memoryDb as any, {
     get(_target, modelProp: string) {
@@ -1707,16 +1796,31 @@ function createResilientDb(): typeof memoryDb | typeof prisma {
       }
 
       const now = Date.now();
+      const isProd = process.env.NODE_ENV === 'production';
+      const isDbConfigured = shouldUsePrisma();
       const shouldAttemptPrisma =
-        shouldUsePrisma() &&
+        isDbConfigured &&
         (!prismaUnreachable || now - lastFailureTime > RETRY_INTERVAL_MS);
-
-      if (!shouldAttemptPrisma) {
-        return (memoryDb as any)[modelProp];
-      }
 
       const prismaModel = (prisma as any)?.[modelProp];
       const memoryModel = (memoryDb as any)[modelProp];
+
+      if (!shouldAttemptPrisma) {
+        return new Proxy(memoryModel || {}, {
+          get(_memTarget, methodProp: string) {
+            const memoryMethod = memoryModel ? memoryModel[methodProp] : undefined;
+            if (isProd && WRITE_METHODS.has(methodProp)) {
+              return async function () {
+                const reason = !isDbConfigured
+                  ? 'DATABASE_URL environment variable is missing or invalid in production'
+                  : 'PostgreSQL database server is unreachable';
+                throw new DatabasePersistenceError(`Database persistence unavailable: ${reason}. Write operation aborted to prevent silent data loss.`);
+              };
+            }
+            return memoryMethod;
+          },
+        });
+      }
 
       if (!prismaModel) {
         return memoryModel;
@@ -1738,6 +1842,12 @@ function createResilientDb(): typeof memoryDb | typeof prisma {
               (!prismaUnreachable || currentNow - lastFailureTime > RETRY_INTERVAL_MS);
 
             if (!attempt) {
+              if (isProd && WRITE_METHODS.has(methodProp)) {
+                const reason = !isDbConfigured
+                  ? 'DATABASE_URL environment variable is missing or invalid in production'
+                  : 'PostgreSQL database server is unreachable';
+                throw new DatabasePersistenceError(`Database persistence unavailable: ${reason}. Write operation aborted to prevent silent data loss.`);
+              }
               if (typeof memoryMethod === 'function') {
                 return memoryMethod.apply(memoryModel, args);
               }
@@ -1745,19 +1855,44 @@ function createResilientDb(): typeof memoryDb | typeof prisma {
             }
 
             try {
-              return await prismaMethod.apply(prismaModel, args);
+              const result = await prismaMethod.apply(prismaModel, args);
+              if (prismaUnreachable) {
+                console.info('[DB Connection] PostgreSQL connection re-established successfully.');
+                prismaUnreachable = false;
+              }
+              return result;
             } catch (err: any) {
               if (isConnectionError(err)) {
                 if (!prismaUnreachable) {
-                  console.warn(`[DB] Database server unreachable (${err.message || 'connection failed'}). Gracefully falling back to in-memory repository.`);
+                  console.warn(`[DB Connection] Database server unreachable (${err.message || 'connection failed'}).`);
                 }
                 prismaUnreachable = true;
                 lastFailureTime = Date.now();
+
+                if (isProd && WRITE_METHODS.has(methodProp)) {
+                  throw new DatabasePersistenceError(`Database persistence unavailable: PostgreSQL connection failed (${err.message || 'unreachable'}). Write operation aborted to prevent silent data loss.`);
+                }
 
                 if (typeof memoryMethod === 'function') {
                   return memoryMethod.apply(memoryModel, args);
                 }
               }
+
+              if (isSchemaError(err)) {
+                if (!prismaSchemaDrift) {
+                  console.error(`[DB Schema Drift] PostgreSQL schema mismatch detected (code: ${err.code || 'unknown'}). Migration required: ${err.message || ''}.`);
+                }
+                prismaSchemaDrift = true;
+
+                if (isProd && WRITE_METHODS.has(methodProp)) {
+                  throw new DatabasePersistenceError(`Database persistence unavailable: PostgreSQL schema drift detected.`);
+                }
+
+                if (typeof memoryMethod === 'function') {
+                  return memoryMethod.apply(memoryModel, args);
+                }
+              }
+
               throw err;
             }
           };
@@ -1774,7 +1909,7 @@ const resilientDb = createResilientDb();
  * Uses Prisma when PostgreSQL is reachable, and automatically falls back to the in-memory repository.
  */
 export function getDb(): typeof memoryDb | typeof prisma {
-  if (!shouldUsePrisma()) {
+  if (!shouldUsePrisma() && process.env.NODE_ENV !== 'production') {
     return memoryDb;
   }
   return resilientDb;
@@ -1804,5 +1939,8 @@ export function resetMemoryDb() {
   memoryStore.navigationItems.clear();
   memoryStore.footerSettings.clear();
   memoryStore.formatContents.clear();
+  prismaUnreachable = false;
+  prismaSchemaDrift = false;
+  lastFailureTime = 0;
   seedDefaultData();
 }

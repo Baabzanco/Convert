@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { ToolDefinition } from '@/lib/tools';
+import { ToolDefinition, getToolBySlug } from '@/lib/tools';
 import Container from '@/components/layout/Container';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
 import AdSlot from '@/components/ads/AdSlot';
@@ -59,9 +59,17 @@ import {
   createHowToSchema,
   siteConfig,
 } from '@/lib/seo';
+import { UniversalContentBlock } from '@/lib/cms/blocks';
+import { generateCanonicalToolContract } from '@/lib/cms/tool-contract';
+import { InlineBlockWrapper } from '@/components/admin/inline/InlineBlockWrapper';
+import { InlineBlockEditorDrawer } from '@/components/admin/inline/InlineBlockEditorDrawer';
+import { InlineRevisionDrawer } from '@/components/admin/inline/InlineRevisionDrawer';
+import { InlineEditorToolbar } from '@/components/admin/inline/InlineEditorToolbar';
+import { InlineSeoDrawer, InlineSeoData } from '@/components/admin/inline/InlineSeoDrawer';
 
 interface ToolPageProps {
   tool: ToolDefinition;
+  isPreview?: boolean;
 }
 
 function CmsToolBlock({ block, tool }: { block: any; tool: ToolDefinition }) {
@@ -219,9 +227,13 @@ function CmsToolBlock({ block, tool }: { block: any; tool: ToolDefinition }) {
     case 'related_tools': {
       const slugs = content.slugs || [];
       if (slugs.length === 0) return null;
+      const validSlugs = slugs
+        .filter((s: any) => typeof s === 'string' && Boolean(getToolBySlug(s)))
+        .slice(0, 4);
+      if (validSlugs.length === 0) return null;
       return (
         <div className="border-t border-[#E4E2F0] pt-6">
-          <RelatedTools slugs={slugs.filter((s: any) => typeof s === 'string').slice(0, 4)} title={content.heading || "Related Tools"} />
+          <RelatedTools slugs={validSlugs} title={content.heading || "Related Tools"} />
         </div>
       );
     }
@@ -271,11 +283,11 @@ function CmsToolBlock({ block, tool }: { block: any; tool: ToolDefinition }) {
       );
 
     case 'heading': {
-      const Tag = content.level === 1 ? 'h1' : content.level === 3 ? 'h3' : 'h2';
+      // Prevent competing H1 headings on tool pages; primary H1 is reserved for tool title
+      const level = content.level === 1 ? 2 : content.level === 3 ? 3 : 2;
+      const Tag = level === 3 ? 'h3' : 'h2';
       const classes =
-        content.level === 1
-          ? "text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#0F112E] tracking-tight"
-          : content.level === 3
+        level === 3
           ? "text-xl font-bold text-[#0F112E]"
           : "text-2xl md:text-3xl font-extrabold text-[#0F112E] tracking-tight";
       return <Tag className={`${classes} my-4`}>{content.text}</Tag>;
@@ -404,6 +416,107 @@ function CmsToolBlock({ block, tool }: { block: any; tool: ToolDefinition }) {
       );
     }
 
+    case 'supported_formats': {
+      const inputFormats = content.inputFormats || tool.inputFormats || [];
+      const outputFormats = content.outputFormats || tool.outputFormats || [];
+      return (
+        <section className="py-10 border-t border-[#E4E2F0]" aria-labelledby="supported-formats-heading">
+          <div className="max-w-4xl space-y-4">
+            <h2 id="supported-formats-heading" className="text-2xl md:text-3xl font-extrabold text-[#0F112E] tracking-tight">
+              {content.heading || 'Supported File Formats'}
+            </h2>
+            {content.description && (
+              <p className="text-sm md:text-base text-[#5E6488] leading-relaxed">
+                {content.description}
+              </p>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              <div className="p-5 bg-white border border-[#E4E2F0] rounded-2xl shadow-sm space-y-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#7C3AED]">
+                  Accepted Input Formats
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {inputFormats.map((fmt: string, idx: number) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1 rounded-lg text-xs font-bold bg-[#F4F3FA] text-[#0F112E] border border-[#E4E2F0]"
+                    >
+                      .{String(fmt).toLowerCase()}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="p-5 bg-white border border-[#E4E2F0] rounded-2xl shadow-sm space-y-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#10B981]">
+                  Available Output Formats
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {outputFormats.map((fmt: string, idx: number) => (
+                    <span
+                      key={idx}
+                      className="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    >
+                      .{String(fmt).toLowerCase()}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {content.notes && (
+              <p className="text-xs text-[#5E6488] italic pt-1">{content.notes}</p>
+            )}
+          </div>
+        </section>
+      );
+    }
+
+    case 'technical_details': {
+      const specs = content.specs || [];
+      const limitations = content.limitations || [];
+      return (
+        <section className="py-10 border-t border-[#E4E2F0]" aria-labelledby="technical-details-heading">
+          <div className="max-w-4xl space-y-6">
+            <div>
+              <h2 id="technical-details-heading" className="text-2xl md:text-3xl font-extrabold text-[#0F112E] tracking-tight">
+                {content.heading || 'Technical Details & Limitations'}
+              </h2>
+              {content.description && (
+                <p className="text-sm md:text-base text-[#5E6488] mt-1.5 leading-relaxed">
+                  {content.description}
+                </p>
+              )}
+            </div>
+
+            {specs.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {specs.map((spec: any, idx: number) => (
+                  <div key={idx} className="p-4 bg-white border border-[#E4E2F0] rounded-xl shadow-sm space-y-1">
+                    <span className="text-xs font-bold text-[#5E6488] uppercase tracking-wider">{spec.label}</span>
+                    <p className="text-sm font-semibold text-[#0F112E]">{spec.value}</p>
+                    {spec.notes && <p className="text-xs text-[#5E6488]">{spec.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {limitations.length > 0 && (
+              <div className="p-5 bg-[#FAF9FF] border border-[#E4E2F0] rounded-2xl space-y-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#5E6488]">Known Limitations & Device Notes</span>
+                <ul className="space-y-1.5">
+                  {limitations.map((lim: string, idx: number) => (
+                    <li key={idx} className="text-xs sm:text-sm text-[#5E6488] flex items-start gap-2">
+                      <span className="text-[#7C3AED] font-bold">•</span>
+                      <span>{lim}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </section>
+      );
+    }
+
     case 'spacer':
       return <div style={{ height: `${content.height || 24}px` }} />;
 
@@ -412,8 +525,200 @@ function CmsToolBlock({ block, tool }: { block: any; tool: ToolDefinition }) {
   }
 }
 
-export function ToolPage({ tool }: ToolPageProps) {
+function getBlockLabel(type: string): string {
+  switch (type) {
+    case 'hero':
+      return 'Hero';
+    case 'intro':
+      return 'Introduction';
+    case 'how_to_use':
+    case 'how_to':
+      return 'How-To Steps';
+    case 'features':
+      return 'Features';
+    case 'supported_formats':
+      return 'Supported Formats';
+    case 'technical_details':
+      return 'Technical Details';
+    case 'privacy_note':
+      return 'Privacy & Guarantee';
+    case 'use_cases':
+      return 'Use Cases';
+    case 'faq':
+      return 'FAQ';
+    case 'related_tools':
+      return 'Related Tools';
+    case 'cta':
+      return 'Call to Action';
+    default:
+      return type.replace('_', ' ');
+  }
+}
+
+export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
   const [selectedFiles, setSelectedFiles] = useState<FileItemData[]>([]);
+
+  // Inline editing state
+  const [activeBlocks, setActiveBlocks] = useState<UniversalContentBlock[]>(() => {
+    if (Array.isArray(tool.blocks) && tool.blocks.length > 0) {
+      return tool.blocks;
+    }
+    return [];
+  });
+  const [seoData, setSeoData] = useState<InlineSeoData | null>(() => (tool as any).seo || null);
+  const [isEditingMode, setIsEditingMode] = useState(false);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [isSeoOpen, setIsSeoOpen] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const [isPublished, setIsPublished] = useState(!isPreview);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [isRevisionsOpen, setIsRevisionsOpen] = useState(false);
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState<string | null>(null);
+  const [feedbackMessage, setFeedbackMessage] = useState<{
+    type: 'success' | 'error' | 'warning';
+    text: string;
+  } | null>(null);
+
+  const handleToggleEdit = () => {
+    if (!isEditingMode && activeBlocks.length === 0) {
+      const canonicalBlocks = generateCanonicalToolContract(tool);
+      setActiveBlocks(canonicalBlocks);
+    }
+    setIsEditingMode((prev) => !prev);
+    setSelectedBlockId(null);
+  };
+
+  const handleSaveSeoFromDrawer = (updatedSeo: InlineSeoData) => {
+    setSeoData(updatedSeo);
+    setIsDirty(true);
+  };
+
+  const handleSaveDraft = async () => {
+    setIsSaving(true);
+    setFeedbackMessage(null);
+    try {
+      const res = await fetch(`/api/admin/tools/${tool.slug}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          blocks: activeBlocks,
+          seo: seoData || undefined,
+          isPublished: false,
+          expectedUpdatedAt: expectedUpdatedAt || undefined,
+          reason: 'Inline visual content edit',
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setIsDirty(false);
+        setIsPublished(false);
+        if (data.toolContent?.updatedAt) {
+          setExpectedUpdatedAt(data.toolContent.updatedAt);
+        }
+        setFeedbackMessage({
+          type: 'success',
+          text: 'Draft saved successfully. Content is preserved in draft state.',
+        });
+      } else if (res.status === 409) {
+        const data = await res.json();
+        setFeedbackMessage({
+          type: 'warning',
+          text: data.error || 'Concurrent edit conflict: Content has been modified by another admin.',
+        });
+      } else {
+        const data = await res.json();
+        setFeedbackMessage({
+          type: 'error',
+          text: data.error || 'Failed to save draft.',
+        });
+      }
+    } catch {
+      setFeedbackMessage({
+        type: 'error',
+        text: 'Network error saving draft.',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    const confirmed = window.confirm(
+      `Are you sure you want to publish your changes to '${tool.name}'? This will make the draft visible to all public visitors.`
+    );
+    if (!confirmed) return;
+
+    setIsPublishing(true);
+    setFeedbackMessage(null);
+    try {
+      const res = await fetch(`/api/admin/tools/${tool.slug}/publish`, {
+        method: 'POST',
+      });
+
+      if (res.ok) {
+        setIsPublished(true);
+        setFeedbackMessage({
+          type: 'success',
+          text: `'${tool.name}' published successfully to the live site!`,
+        });
+      } else {
+        const data = await res.json();
+        setFeedbackMessage({
+          type: 'error',
+          text: data.error || 'Failed to publish tool.',
+        });
+      }
+    } catch {
+      setFeedbackMessage({
+        type: 'error',
+        text: 'Network error publishing tool.',
+      });
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const handleDiscard = () => {
+    if (!isDirty) return;
+    const confirmed = window.confirm('Discard all unsaved edits made during this session?');
+    if (confirmed) {
+      setActiveBlocks(tool.blocks || []);
+      setIsDirty(false);
+      setSelectedBlockId(null);
+      setFeedbackMessage({
+        type: 'warning',
+        text: 'Unsaved edits discarded.',
+      });
+    }
+  };
+
+  const handleSaveBlockFromDrawer = (updatedBlock: UniversalContentBlock) => {
+    setActiveBlocks((prev) =>
+      prev.map((b) => (b.id === updatedBlock.id ? updatedBlock : b))
+    );
+    setIsDirty(true);
+  };
+
+  const handleRevisionRestored = async () => {
+    try {
+      const res = await fetch(`/api/admin/tools/${tool.slug}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.override?.blocks) {
+          setActiveBlocks(data.override.blocks);
+        }
+        setIsDirty(false);
+        setIsPublished(false);
+        if (data.override?.updatedAt) {
+          setExpectedUpdatedAt(data.override.updatedAt);
+        }
+      }
+    } catch {
+      // Ignore
+    }
+  };
 
   const isImageCategory = tool.category.startsWith('image') || ['image-to-pdf', 'jpg-to-pdf', 'png-to-pdf'].includes(tool.slug);
   const categoryName = isImageCategory ? 'Image Tools' : 'PDF Tools';
@@ -460,9 +765,11 @@ export function ToolPage({ tool }: ToolPageProps) {
       ? tool.relatedTools.slice(0, 4)
       : tool.youMayAlsoNeed || [];
 
-  const hasCmsBlocks = Array.isArray(tool.blocks) && tool.blocks.length > 0;
-  const heroBlock = hasCmsBlocks && tool.blocks ? tool.blocks.find((b: any) => b.type === 'hero' && b.enabled !== false) : null;
-  const subsequentBlocks = hasCmsBlocks && tool.blocks ? tool.blocks.filter((b: any) => b.type !== 'hero' && b.enabled !== false) : [];
+  const blocksToRender = activeBlocks.length > 0 ? activeBlocks : (tool.blocks || []);
+  const hasCmsBlocks = blocksToRender.length > 0;
+  const heroBlock = hasCmsBlocks ? blocksToRender.find((b: any) => b.type === 'hero' && b.enabled !== false) : null;
+  const subsequentBlocks = hasCmsBlocks ? blocksToRender.filter((b: any) => b.type !== 'hero' && b.enabled !== false) : [];
+  const selectedBlock = activeBlocks.find((b) => b.id === selectedBlockId) || null;
 
   return (
     <>
@@ -488,7 +795,16 @@ export function ToolPage({ tool }: ToolPageProps) {
 
           {/* 1. H1 Header & Short Description */}
           {hasCmsBlocks && heroBlock ? (
-            <CmsToolBlock block={heroBlock} tool={tool} />
+            <InlineBlockWrapper
+              blockId={heroBlock.id}
+              blockType={heroBlock.type}
+              label={getBlockLabel(heroBlock.type)}
+              isEditing={isEditingMode}
+              isSelected={selectedBlockId === heroBlock.id}
+              onSelect={() => setSelectedBlockId(heroBlock.id)}
+            >
+              <CmsToolBlock block={heroBlock} tool={tool} />
+            </InlineBlockWrapper>
           ) : (
             <header className="max-w-3xl mb-8 space-y-3">
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#0F112E] tracking-tight">
@@ -583,7 +899,17 @@ export function ToolPage({ tool }: ToolPageProps) {
 
           {hasCmsBlocks ? (
             subsequentBlocks.map((block: any) => (
-              <CmsToolBlock key={block.id} block={block} tool={tool} />
+              <InlineBlockWrapper
+                key={block.id}
+                blockId={block.id}
+                blockType={block.type}
+                label={getBlockLabel(block.type)}
+                isEditing={isEditingMode}
+                isSelected={selectedBlockId === block.id}
+                onSelect={() => setSelectedBlockId(block.id)}
+              >
+                <CmsToolBlock block={block} tool={tool} />
+              </InlineBlockWrapper>
             ))
           ) : (
             <>
@@ -805,6 +1131,61 @@ export function ToolPage({ tool }: ToolPageProps) {
           )}
         </Container>
       </div>
+
+      {/* Admin Inline Visual Content Editor Controls */}
+      <InlineEditorToolbar
+        slug={tool.slug}
+        isEditing={isEditingMode}
+        isDirty={isDirty}
+        isPublished={isPublished}
+        isPreviewMode={isPreview}
+        onToggleEdit={handleToggleEdit}
+        onSaveDraft={handleSaveDraft}
+        onPublish={handlePublish}
+        onDiscard={handleDiscard}
+        onOpenRevisions={() => setIsRevisionsOpen(true)}
+        onOpenSeo={() => setIsSeoOpen(true)}
+        hasSeoOverride={Boolean(
+          seoData &&
+            (seoData.seoTitle ||
+              seoData.metaDescription ||
+              seoData.canonicalUrl ||
+              seoData.ogTitle ||
+              seoData.ogDescription ||
+              seoData.ogImage)
+        )}
+        isSaving={isSaving}
+        isPublishing={isPublishing}
+        feedbackMessage={feedbackMessage}
+      />
+
+      <InlineBlockEditorDrawer
+        block={selectedBlock}
+        isOpen={isEditingMode && Boolean(selectedBlockId)}
+        onClose={() => setSelectedBlockId(null)}
+        onSaveBlock={handleSaveBlockFromDrawer}
+      />
+
+      <InlineSeoDrawer
+        slug={tool.slug}
+        pageType="tool"
+        isOpen={isSeoOpen}
+        onClose={() => setIsSeoOpen(false)}
+        seoData={seoData}
+        inheritedDefaults={{
+          title: tool.title,
+          description: tool.description,
+          canonicalUrl: `${siteConfig.url}/tools/${tool.slug}`,
+        }}
+        onSaveSeo={handleSaveSeoFromDrawer}
+      />
+
+      <InlineRevisionDrawer
+        slug={tool.slug}
+        isOpen={isRevisionsOpen}
+        onClose={() => setIsRevisionsOpen(false)}
+        onRevisionRestored={handleRevisionRestored}
+      />
     </>
   );
 }

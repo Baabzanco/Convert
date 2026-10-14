@@ -193,6 +193,22 @@ export async function upsertToolContent(
   const sanitized = validation.sanitized;
   const db = getDb();
 
+  // Optimistic concurrency check: prevent silent overwrite of newer changes
+  if (input.expectedUpdatedAt) {
+    const existing = await db.toolContent.findUnique({
+      where: { toolSlug: slug },
+    });
+    if (existing && existing.updatedAt) {
+      const existingTime = new Date(existing.updatedAt).getTime();
+      const expectedTime = new Date(input.expectedUpdatedAt).getTime();
+      if (existingTime > expectedTime) {
+        throw new Error(
+          `CONCURRENT_MODIFICATION: Content for '${slug}' has been updated by another user since you loaded it. Please reload to review the latest changes.`
+        );
+      }
+    }
+  }
+
   const updated = await db.toolContent.upsert({
     where: { toolSlug: slug },
     create: {

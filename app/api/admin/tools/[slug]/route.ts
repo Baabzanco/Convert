@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAuth } from '@/lib/admin/guard';
 import { getToolContentBySlug, upsertToolContent } from '@/lib/admin/services/tool.service';
+import { handleAdminApiError } from '@/lib/admin/api-error';
 
 interface RouteParams {
   params: Promise<{ slug: string }>;
@@ -29,7 +30,6 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     const updated = await upsertToolContent(slug, body, auth.user);
     return NextResponse.json({ toolContent: updated, success: true });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to update tool content.';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return handleAdminApiError(err);
   }
 }

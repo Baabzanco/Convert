@@ -20,11 +20,17 @@ if (initialCleanUrl) {
 
 export function isPrismaConfigured(): boolean {
   const url = cleanDatabaseUrl(process.env.DATABASE_URL);
-  return Boolean(
-    url &&
-    (url.startsWith('postgresql://') || url.startsWith('postgres://')) &&
-    !process.env.USE_MEMORY_DB
-  );
+  if (!url || process.env.USE_MEMORY_DB) return false;
+
+  const isPlaceholderUrl =
+    url.includes('postgres:postgres@localhost') ||
+    url.includes('localhost:5432/filetools_db');
+
+  if (isPlaceholderUrl && process.env.NODE_ENV !== 'production' && !process.env.DATABASE_URL_EXPLICIT) {
+    return false;
+  }
+
+  return url.startsWith('postgresql://') || url.startsWith('postgres://');
 }
 
 const globalForPrisma = globalThis as unknown as {
@@ -52,7 +58,7 @@ function createPrismaClient(): PrismaClient {
             url: url!,
           },
         },
-        log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+        log: process.env.PRISMA_LOG === 'true' ? ['error'] : [],
       })
     );
   } catch (err) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { loginAdmin } from '@/lib/admin/services/auth.service';
-import { ADMIN_COOKIE_NAME, sessionCookieOptions } from '@/lib/admin/session';
+import { getSessionCookieOptions } from '@/lib/admin/session';
+import { handleAdminApiError } from '@/lib/admin/api-error';
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,14 +15,14 @@ export async function POST(req: NextRequest) {
       user,
     });
 
+    const cookieOpts = getSessionCookieOptions(req);
     response.cookies.set({
-      ...sessionCookieOptions,
+      ...cookieOpts,
       value: token,
     });
 
     return response;
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Login failed.';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return handleAdminApiError(err);
   }
 }

@@ -31,6 +31,19 @@ export default function AdminLoginPage() {
         throw new Error(data.error || 'Authentication failed. Please verify your credentials.');
       }
 
+      // Verify that the browser actually stored and sent the session cookie
+      const verifyRes = await fetch('/api/admin/auth/me');
+      if (!verifyRes.ok) {
+        const isHttp = typeof window !== 'undefined' && window.location.protocol === 'http:';
+        if (isHttp) {
+          throw new Error(
+            'Authentication succeeded, but your browser rejected the session cookie over plain HTTP. ' +
+            'For plain-HTTP testing on a VPS, add COOKIE_SECURE=false to your .env file, or access the site over HTTPS.'
+          );
+        }
+        throw new Error('Authentication succeeded, but the administrative session could not be established in your browser. Please check cookie settings or refresh.');
+      }
+
       router.push('/admin/dashboard');
       router.refresh();
     } catch (err: unknown) {

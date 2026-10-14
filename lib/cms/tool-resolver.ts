@@ -3,6 +3,7 @@ import { getToolBySlug, ToolDefinition } from '@/lib/tools';
 import { getMergedTool } from '@/lib/admin/services/tool.service';
 import { getDb } from '@/lib/db';
 import { siteConfig } from '@/lib/seo';
+import { buildCanonicalUrl } from '@/lib/cms/unified-content';
 
 /**
  * Public Tool Resolver.
@@ -46,9 +47,16 @@ export async function buildToolMetadata(
     }
 
     const seo = override.seo;
-    const title = seo.seoTitle || override.customTitle || (defaultMeta.title as string);
-    const description = seo.metaDescription || override.customDescription || (defaultMeta.description as string);
-    const canonicalUrl = seo.canonicalUrl || `${siteConfig.url}/tools/${slug}`;
+    const isNonEmpty = (v?: string | null): v is string => typeof v === 'string' && v.trim().length > 0;
+    const title =
+      (isNonEmpty(seo.seoTitle) ? seo.seoTitle.trim() : null) ||
+      (isNonEmpty(override.customTitle) ? override.customTitle.trim() : null) ||
+      (defaultMeta.title as string);
+    const description =
+      (isNonEmpty(seo.metaDescription) ? seo.metaDescription.trim() : null) ||
+      (isNonEmpty(override.customDescription) ? override.customDescription.trim() : null) ||
+      (defaultMeta.description as string);
+    const canonicalUrl = buildCanonicalUrl(seo.canonicalUrl, `/tools/${slug}`);
 
     return {
       ...defaultMeta,

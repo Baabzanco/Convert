@@ -194,6 +194,7 @@ export interface UpdateToolContentInput {
   isPublished?: boolean;
   seo?: PageSeoInput;
   reason?: string;
+  expectedUpdatedAt?: string;
 }
 
 export interface UpdateSettingsInput {

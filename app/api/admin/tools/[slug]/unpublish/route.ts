@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { requireAdminAuth } from '@/lib/admin/guard';
 import { unpublishTool } from '@/lib/admin/services/tool.service';
+import { handleAdminApiError } from '@/lib/admin/api-error';
 
 interface RouteParams {
   params: Promise<{ slug: string }>;
@@ -17,7 +18,6 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     revalidatePath(`/tools/${slug}`);
     return NextResponse.json({ success: true, toolContent: updated });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to unpublish tool.';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return handleAdminApiError(err);
   }
 }

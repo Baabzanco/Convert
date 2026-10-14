@@ -19,6 +19,8 @@ export type ContentBlockType =
   | 'cards'
   | 'privacy_note'
   | 'use_cases'
+  | 'supported_formats'
+  | 'technical_details'
   | 'spacer';
 
 export interface UniversalContentBlock {
@@ -80,6 +82,8 @@ export function normalizeBlock(block: any, defaultOrder = 0): UniversalContentBl
     'cards',
     'privacy_note',
     'use_cases',
+    'supported_formats',
+    'technical_details',
     'spacer',
   ];
 
@@ -87,6 +91,10 @@ export function normalizeBlock(block: any, defaultOrder = 0): UniversalContentBl
     type = rawType as ContentBlockType;
   } else if (rawType === 'button') {
     type = 'cta';
+  } else if (rawType === 'formats' || rawType === 'format_support') {
+    type = 'supported_formats';
+  } else if (rawType === 'tech_specs' || rawType === 'technical_specs' || rawType === 'limitations') {
+    type = 'technical_details';
   } else {
     // Graceful handling of unknown types
     type = 'paragraph';
