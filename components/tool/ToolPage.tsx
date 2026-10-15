@@ -50,6 +50,13 @@ import {
   FileText,
   Repeat,
   ArrowLeft,
+  Plus,
+  Trash2,
+  Type,
+  Image as ImageIcon,
+  MousePointerClick,
+  HelpCircle,
+  Grid,
 } from 'lucide-react';
 import JsonLd from '@/components/seo/JsonLd';
 import {
@@ -59,13 +66,14 @@ import {
   createHowToSchema,
   siteConfig,
 } from '@/lib/seo';
-import { UniversalContentBlock } from '@/lib/cms/blocks';
+import { UniversalContentBlock, duplicateBlock } from '@/lib/cms/blocks';
 import { generateCanonicalToolContract } from '@/lib/cms/tool-contract';
 import { InlineBlockWrapper } from '@/components/admin/inline/InlineBlockWrapper';
 import { InlineBlockEditorDrawer } from '@/components/admin/inline/InlineBlockEditorDrawer';
 import { InlineRevisionDrawer } from '@/components/admin/inline/InlineRevisionDrawer';
 import { InlineEditorToolbar } from '@/components/admin/inline/InlineEditorToolbar';
 import { InlineSeoDrawer, InlineSeoData } from '@/components/admin/inline/InlineSeoDrawer';
+import { InlineSharedSettingsDrawer } from '@/components/admin/inline/InlineSharedSettingsDrawer';
 
 interface ToolPageProps {
   tool: ToolDefinition;
@@ -574,6 +582,7 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isRevisionsOpen, setIsRevisionsOpen] = useState(false);
+  const [isSharedSettingsOpen, setIsSharedSettingsOpen] = useState(false);
   const [expectedUpdatedAt, setExpectedUpdatedAt] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<{
     type: 'success' | 'error' | 'warning';
@@ -701,6 +710,105 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
     setIsDirty(true);
   };
 
+  const handleAddBlock = (type: string) => {
+    const newId = `blk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const nextOrder = activeBlocks.length + 1;
+    let newBlock: UniversalContentBlock;
+
+    switch (type) {
+      case 'heading':
+        newBlock = {
+          id: newId,
+          type: 'heading',
+          order: nextOrder,
+          enabled: true,
+          content: { level: 2, text: `More About ${tool.name}` },
+          text: `More About ${tool.name}`,
+          level: 2,
+        };
+        break;
+      case 'paragraph':
+        newBlock = {
+          id: newId,
+          type: 'paragraph',
+          order: nextOrder,
+          enabled: true,
+          content: { text: `Learn how ${tool.name} processes your files locally and securely.` },
+          text: `Learn how ${tool.name} processes your files locally and securely.`,
+        };
+        break;
+      case 'feature':
+        newBlock = {
+          id: newId,
+          type: 'feature',
+          order: nextOrder,
+          enabled: true,
+          content: { title: 'Specialized Algorithm', description: 'Optimized specifically for speed and quality retention.', icon: 'Zap' },
+          title: 'Specialized Algorithm',
+          description: 'Optimized specifically for speed and quality retention.',
+        };
+        break;
+      case 'faq':
+        newBlock = {
+          id: newId,
+          type: 'faq',
+          order: nextOrder,
+          enabled: true,
+          content: { question: `How secure is ${tool.name}?`, answer: 'Your files are processed directly in your browser without cloud uploads.' },
+          question: `How secure is ${tool.name}?`,
+          answer: 'Your files are processed directly in your browser without cloud uploads.',
+        };
+        break;
+      case 'cta':
+        newBlock = {
+          id: newId,
+          type: 'cta',
+          order: nextOrder,
+          enabled: true,
+          content: { label: 'Explore More Converters', href: '/#explore-hubs', variant: 'primary' },
+          label: 'Explore More Converters',
+          href: '/#explore-hubs',
+        };
+        break;
+      default:
+        newBlock = {
+          id: newId,
+          type: 'paragraph',
+          order: nextOrder,
+          enabled: true,
+          content: { text: 'New content block.' },
+        };
+    }
+
+    setActiveBlocks((prev) => [...prev, newBlock]);
+    setIsDirty(true);
+    setSelectedBlockId(newId);
+  };
+
+  const handleDeleteBlock = (blockId: string) => {
+    setActiveBlocks((prev) => prev.filter((b) => b.id !== blockId));
+    setIsDirty(true);
+    if (selectedBlockId === blockId) setSelectedBlockId(null);
+  };
+
+  const handleMoveBlock = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= activeBlocks.length) return;
+    const updated = [...activeBlocks];
+    const temp = updated[index];
+    updated[index] = updated[targetIndex];
+    updated[targetIndex] = temp;
+    setActiveBlocks(updated.map((b, idx) => ({ ...b, order: idx })));
+    setIsDirty(true);
+  };
+
+  const handleDuplicateBlock = (block: UniversalContentBlock) => {
+    const copy = duplicateBlock(block);
+    setActiveBlocks((prev) => [...prev, copy]);
+    setIsDirty(true);
+    setSelectedBlockId(copy.id);
+  };
+
   const handleRevisionRestored = async () => {
     try {
       const res = await fetch(`/api/admin/tools/${tool.slug}`);
@@ -777,6 +885,59 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
       <JsonLd data={breadcrumbSchema} />
       {faqSchema && <JsonLd data={faqSchema} />}
       {howToSchema && <JsonLd data={howToSchema} />}
+
+      {/* Add CMS Content Block Toolbar (Visible in Edit Mode) */}
+      {isEditingMode && (
+        <div className="sticky top-16 z-30 bg-[#0F112E]/95 backdrop-blur-md text-white py-2.5 px-4 shadow-lg border-b border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs font-bold">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-[#7C3AED]" />
+            <span>Tool Page Content Editor ({tool.name})</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-white/60 pr-1">Insert Block:</span>
+            <button
+              type="button"
+              onClick={() => handleAddBlock('heading')}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <Type className="w-3 h-3 text-purple-300" />
+              <span>Heading</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddBlock('paragraph')}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <FileText className="w-3 h-3 text-purple-300" />
+              <span>Paragraph</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddBlock('feature')}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <Grid className="w-3 h-3 text-purple-300" />
+              <span>Feature</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddBlock('faq')}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <HelpCircle className="w-3 h-3 text-purple-300" />
+              <span>FAQ</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddBlock('cta')}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <MousePointerClick className="w-3 h-3 text-purple-300" />
+              <span>CTA Button</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="py-8 md:py-12 bg-[#FCFBFF]">
         <Container>
@@ -898,7 +1059,7 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
           </section>
 
           {hasCmsBlocks ? (
-            subsequentBlocks.map((block: any) => (
+            subsequentBlocks.map((block: any, idx: number) => (
               <InlineBlockWrapper
                 key={block.id}
                 blockId={block.id}
@@ -907,6 +1068,10 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
                 isEditing={isEditingMode}
                 isSelected={selectedBlockId === block.id}
                 onSelect={() => setSelectedBlockId(block.id)}
+                onMoveUp={idx > 0 ? () => handleMoveBlock(activeBlocks.indexOf(block), 'up') : undefined}
+                onMoveDown={idx < subsequentBlocks.length - 1 ? () => handleMoveBlock(activeBlocks.indexOf(block), 'down') : undefined}
+                onDuplicate={() => handleDuplicateBlock(block)}
+                onDelete={() => handleDeleteBlock(block.id)}
               >
                 <CmsToolBlock block={block} tool={tool} />
               </InlineBlockWrapper>
@@ -1145,6 +1310,7 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
         onDiscard={handleDiscard}
         onOpenRevisions={() => setIsRevisionsOpen(true)}
         onOpenSeo={() => setIsSeoOpen(true)}
+        onOpenSharedSettings={() => setIsSharedSettingsOpen(true)}
         hasSeoOverride={Boolean(
           seoData &&
             (seoData.seoTitle ||
@@ -1185,6 +1351,11 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
         isOpen={isRevisionsOpen}
         onClose={() => setIsRevisionsOpen(false)}
         onRevisionRestored={handleRevisionRestored}
+      />
+
+      <InlineSharedSettingsDrawer
+        isOpen={isSharedSettingsOpen}
+        onClose={() => setIsSharedSettingsOpen(false)}
       />
     </>
   );

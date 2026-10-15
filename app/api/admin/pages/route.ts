@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAuth } from '@/lib/admin/guard';
-import { getPages, createDraftPage } from '@/lib/admin/services/page.service';
+import { getPages, getPageBySlug, createDraftPage } from '@/lib/admin/services/page.service';
+import { handleAdminApiError } from '@/lib/admin/api-error';
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdminAuth(req, 'VIEW_CMS');
@@ -8,9 +9,19 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const statusParam = searchParams.get('status') as 'DRAFT' | 'PUBLISHED' | null;
+  const slugParam = searchParams.get('slug');
 
-  const pages = await getPages({ status: statusParam || undefined });
-  return NextResponse.json({ pages });
+  try {
+    if (slugParam) {
+      const page = await getPageBySlug(slugParam);
+      return NextResponse.json({ page });
+    }
+
+    const pages = await getPages({ status: statusParam || undefined });
+    return NextResponse.json({ pages });
+  } catch (err: unknown) {
+    return handleAdminApiError(err);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -22,7 +33,7 @@ export async function POST(req: NextRequest) {
     const page = await createDraftPage(body, auth.user);
     return NextResponse.json({ page }, { status: 201 });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to create page.';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return handleAdminApiError(err);
   }
 }
+

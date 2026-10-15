@@ -604,6 +604,11 @@ export const memoryDb = {
       });
     },
     async create({ data, include }: { data: any; include?: any }) {
+      for (const p of memoryStore.pages.values()) {
+        if (p.slug === data.slug) {
+          throw new Error(`Unique constraint failed on the fields: (slug)`);
+        }
+      }
       const id = data.id || `page-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
       const page = {
         id,
@@ -659,6 +664,15 @@ export const memoryDb = {
       if (include?.content) res.content = memoryStore.pageContents.get(where.id) || null;
       if (include?.seo) res.seo = memoryStore.pageSeos.get(where.id) || null;
       return res;
+    },
+    async delete({ where }: { where: { id: string } }) {
+      const existing = memoryStore.pages.get(where.id);
+      if (existing) {
+        memoryStore.pages.delete(where.id);
+        memoryStore.pageContents.delete(where.id);
+        memoryStore.pageSeos.delete(where.id);
+      }
+      return existing || null;
     },
     async count({ where }: { where?: any } = {}) {
       if (!where) return memoryStore.pages.size;

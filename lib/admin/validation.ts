@@ -74,6 +74,34 @@ export function sanitizeRichTextHtml(rawHtml?: string | null): string {
 }
 
 /**
+ * Sanitizes custom CSS to prevent style tag escaping, script injection, and expression attacks.
+ */
+export function sanitizeCustomCss(rawCss?: string | null): string {
+  if (!rawCss || typeof rawCss !== 'string') return '';
+
+  let sanitized = rawCss;
+
+  // 1. Remove HTML comments <!-- ... --> and CDATA sections
+  sanitized = sanitized.replace(/<!--[\s\S]*?-->/gi, '');
+  sanitized = sanitized.replace(/<!\[CDATA\[[\s\S]*?\]\]>/gi, '');
+
+  // 2. Remove any tag-like sequences < ... > regardless of whitespace or tag name (handles </style>, </StYlE>, <svg/onload=...>)
+  sanitized = sanitized.replace(/<[^>]*>/gi, '');
+
+  // 3. Remove remaining standalone < or > angle brackets to prevent tag reconstruction
+  sanitized = sanitized.replace(/[<>]/g, '');
+
+  // 4. Remove legacy IE expression() calls and javascript: URLs in CSS
+  sanitized = sanitized.replace(/expression\s*\([^)]*\)/gi, '');
+  sanitized = sanitized.replace(/url\s*\(\s*["']?\s*javascript:[^)]*\)/gi, 'url()');
+
+  // 5. Remove @import rules to prevent unauthorized external CSS loading
+  sanitized = sanitized.replace(/@import\s+[^;]+;/gi, '');
+
+  return sanitized.trim();
+}
+
+/**
  * Validates JSON-LD input ensuring it is parseable JSON and contains no executable code or injection.
  */
 export function validateJsonLd(rawJson: unknown): { isValid: boolean; error?: string; parsed?: Record<string, any> } {
@@ -295,6 +323,11 @@ export function validatePagePayload(
   const seoReport = validateSeo(input.seo);
   errors.push(...seoReport.errors);
   warnings.push(...seoReport.warnings);
+
+  // Custom CSS sanitization
+  if (input.customCss !== undefined && input.customCss !== null) {
+    input.customCss = sanitizeCustomCss(input.customCss);
+  }
 
   return {
     isValid: errors.length === 0,

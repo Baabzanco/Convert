@@ -109,6 +109,28 @@ export default function AdminPagesPage() {
     }
   };
 
+  const [isBootstrapping, setIsBootstrapping] = useState(false);
+
+  const handleBootstrapHomepage = async () => {
+    setIsBootstrapping(true);
+    try {
+      const res = await fetch('/api/admin/pages/bootstrap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to initialize homepage.');
+      await fetchPages();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error initializing homepage.';
+      alert(msg);
+    } finally {
+      setIsBootstrapping(false);
+    }
+  };
+
+  const hasHomepage = pages.some((p) => p.slug === 'home');
+
   const filteredPages = pages.filter((p) => {
     const matchSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -129,6 +151,17 @@ export default function AdminPagesPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {!hasHomepage && !isLoading && (
+            <button
+              onClick={handleBootstrapHomepage}
+              disabled={isBootstrapping}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#7C3AED] hover:bg-[#6D28D9] rounded-lg shadow-sm transition-all disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isBootstrapping ? 'animate-spin' : ''}`} />
+              <span>{isBootstrapping ? 'Initializing...' : 'Initialize Homepage (/)'}</span>
+            </button>
+          )}
+
           <Link
             href="/admin/pages/new"
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#124A57] hover:bg-[#0E3B46] rounded-lg shadow-sm transition-all"
@@ -138,6 +171,41 @@ export default function AdminPagesPage() {
           </Link>
         </div>
       </div>
+
+      {/* Actionable Error Alert */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-center justify-between gap-3 text-xs font-medium">
+          <div className="flex items-center gap-2">
+            <X className="w-4 h-4 text-red-600 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button
+            onClick={fetchPages}
+            className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 font-semibold transition-colors"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Missing Homepage Warning Banner */}
+      {!hasHomepage && !isLoading && !error && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div className="space-y-1">
+            <p className="font-bold">Reserved Homepage Record ('home') Not Initialized</p>
+            <p className="text-amber-700">
+              The public homepage at <span className="font-mono">/</span> uses hardcoded defaults until initialized. Click below to safely create the CMS entry without overwriting live settings.
+            </p>
+          </div>
+          <button
+            onClick={handleBootstrapHomepage}
+            disabled={isBootstrapping}
+            className="px-4 py-2 bg-amber-700 text-white font-bold rounded-lg hover:bg-amber-800 transition-colors whitespace-nowrap shadow-sm disabled:opacity-50"
+          >
+            {isBootstrapping ? 'Initializing...' : 'Initialize Homepage'}
+          </button>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div className="bg-white p-4 rounded-xl border border-[#E5E7EB] shadow-subtle flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -177,8 +245,17 @@ export default function AdminPagesPage() {
             <span>Loading pages...</span>
           </div>
         ) : filteredPages.length === 0 ? (
-          <div className="py-16 text-center text-xs text-[#64748B]">
-            No pages found matching criteria.
+          <div className="py-16 text-center text-xs text-[#64748B] space-y-2">
+            <p>No pages found matching criteria.</p>
+            {!hasHomepage && (
+              <button
+                onClick={handleBootstrapHomepage}
+                disabled={isBootstrapping}
+                className="mt-2 px-4 py-2 bg-[#7C3AED] text-white font-semibold rounded-lg hover:bg-[#6D28D9] transition-colors"
+              >
+                Initialize Default Homepage
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -196,7 +273,16 @@ export default function AdminPagesPage() {
                 {filteredPages.map((page) => (
                   <tr key={page.id} className="hover:bg-[#F8FAFC] transition-colors">
                     <td className="px-5 py-3.5 font-semibold text-[#17202A]">
-                      {page.name}
+                      {page.slug === 'home' ? (
+                        <div className="flex items-center gap-2">
+                          <span>{page.name}</span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-[#EFF6FF] text-[#1D4ED8] border border-[#BFDBFE]">
+                            Homepage (/)
+                          </span>
+                        </div>
+                      ) : (
+                        page.name
+                      )}
                     </td>
                     <td className="px-5 py-3.5 font-mono text-[11px] text-[#64748B]">
                       /{page.slug === 'home' ? '' : page.slug}

@@ -117,42 +117,60 @@ export function CmsBlockRenderer({ blocks }: { blocks: StructuredPageBlock[] }) 
 
   return (
     <div className="space-y-6">
-      {blocks.map((block) => {
-        switch (block.type) {
+      {blocks.map((block: any) => {
+        if (!block || block.enabled === false) return null;
+
+        const type = block.type;
+        const title = block.title || block.content?.title || block.data?.title;
+        const description = block.description || block.content?.description || block.data?.description;
+        const text = block.text || block.content?.text || block.data?.text;
+        const html = block.html || block.content?.html || block.data?.html;
+        const level = block.level || block.content?.level || block.data?.level || 2;
+        const href = block.href || block.content?.href || block.data?.href || '#';
+        const label = block.label || block.content?.label || block.data?.label || text || 'Click Here';
+        const variant = block.variant || block.content?.variant || block.data?.variant;
+        const isExternal = block.isExternal || block.content?.isExternal || block.data?.isExternal;
+        const question = block.question || block.content?.question || block.data?.question;
+        const answer = block.answer || block.content?.answer || block.data?.answer;
+        const src = block.src || block.content?.src || block.data?.src;
+        const alt = block.alt || block.content?.alt || block.data?.alt || 'CMS Image';
+        const caption = block.caption || block.content?.caption || block.data?.caption;
+
+        switch (type) {
           case 'section':
             return (
               <section key={block.id} className="pt-4 pb-2 space-y-2 border-t border-[#F1F5F9] first:border-0 first:pt-0">
-                {block.title && (
+                {title && (
                   <h2 className="text-2xl md:text-3xl font-bold text-[#17202A] tracking-tight">
-                    {block.title}
+                    {title}
                   </h2>
                 )}
-                {block.description && (
+                {description && (
                   <p className="text-base text-[#667085] leading-relaxed">
-                    {block.description}
+                    {description}
                   </p>
                 )}
               </section>
             );
 
           case 'heading': {
-            if (block.level === 1) {
+            if (Number(level) === 1) {
               return (
                 <h1 key={block.id} className="text-3xl md:text-4xl lg:text-5xl font-bold text-[#17202A] tracking-tight">
-                  {block.text}
+                  {text}
                 </h1>
               );
             }
-            if (block.level === 3) {
+            if (Number(level) === 3) {
               return (
                 <h3 key={block.id} className="text-xl font-bold text-[#17202A] tracking-tight">
-                  {block.text}
+                  {text}
                 </h3>
               );
             }
             return (
               <h2 key={block.id} className="text-2xl md:text-3xl font-bold text-[#17202A] tracking-tight">
-                {block.text}
+                {text}
               </h2>
             );
           }
@@ -160,12 +178,12 @@ export function CmsBlockRenderer({ blocks }: { blocks: StructuredPageBlock[] }) 
           case 'paragraph':
             return (
               <p key={block.id} className="text-base text-[#17202A] leading-relaxed">
-                {block.text}
+                {text}
               </p>
             );
 
           case 'rich_text': {
-            const cleanHtml = sanitizeRichTextHtml(block.html);
+            const cleanHtml = sanitizeRichTextHtml(html || '');
             return (
               <div
                 key={block.id}
@@ -176,18 +194,18 @@ export function CmsBlockRenderer({ blocks }: { blocks: StructuredPageBlock[] }) 
           }
 
           case 'cta': {
-            const isPrimary = block.variant !== 'outline' && block.variant !== 'secondary';
+            const isPrimary = variant !== 'outline' && variant !== 'secondary';
             return (
               <div key={block.id} className="pt-2">
                 <Link
-                  href={block.href || '#'}
+                  href={href}
                   className={`inline-flex items-center px-5 py-2.5 rounded-lg text-sm font-semibold transition-all ${
                     isPrimary
                       ? 'bg-[#124A57] text-white hover:bg-[#0E3B46] shadow-sm'
                       : 'bg-white border border-[#CBD5E1] text-[#17202A] hover:bg-[#F8FAFC]'
                   }`}
                 >
-                  {block.label}
+                  {label}
                 </Link>
               </div>
             );
@@ -197,12 +215,12 @@ export function CmsBlockRenderer({ blocks }: { blocks: StructuredPageBlock[] }) 
             return (
               <div key={block.id}>
                 <Link
-                  href={block.href || '#'}
-                  target={block.isExternal ? '_blank' : undefined}
-                  rel={block.isExternal ? 'noopener noreferrer' : undefined}
+                  href={href}
+                  target={isExternal ? '_blank' : undefined}
+                  rel={isExternal ? 'noopener noreferrer' : undefined}
                   className="text-sm font-semibold text-[#124A57] hover:underline"
                 >
-                  {block.text}
+                  {text}
                 </Link>
               </div>
             );
@@ -210,16 +228,16 @@ export function CmsBlockRenderer({ blocks }: { blocks: StructuredPageBlock[] }) 
           case 'feature':
             return (
               <div key={block.id} className="p-5 bg-white border border-[#E5E7EB] rounded-card space-y-2">
-                <h3 className="font-semibold text-base text-[#17202A]">{block.title}</h3>
-                <p className="text-sm text-[#667085]">{block.description}</p>
+                <h3 className="font-semibold text-base text-[#17202A]">{title}</h3>
+                <p className="text-sm text-[#667085]">{description}</p>
               </div>
             );
 
           case 'faq':
             return (
               <div key={block.id} className="p-4 bg-[#F8FAFC] border border-[#E5E7EB] rounded-lg space-y-1.5">
-                <h4 className="font-semibold text-sm text-[#17202A]">{block.question}</h4>
-                <p className="text-xs sm:text-sm text-[#64748B] leading-relaxed">{block.answer}</p>
+                <h4 className="font-semibold text-sm text-[#17202A]">{question}</h4>
+                <p className="text-xs sm:text-sm text-[#64748B] leading-relaxed">{answer}</p>
               </div>
             );
 
@@ -227,12 +245,12 @@ export function CmsBlockRenderer({ blocks }: { blocks: StructuredPageBlock[] }) 
             return (
               <div key={block.id} className="space-y-1.5 pt-2">
                 <img
-                  src={block.src}
-                  alt={block.alt || 'CMS image'}
+                  src={src}
+                  alt={alt}
                   className="rounded-card border border-[#E5E7EB] max-w-full h-auto"
                 />
-                {block.caption && (
-                  <p className="text-xs text-[#64748B] italic">{block.caption}</p>
+                {caption && (
+                  <p className="text-xs text-[#64748B] italic">{caption}</p>
                 )}
               </div>
             );

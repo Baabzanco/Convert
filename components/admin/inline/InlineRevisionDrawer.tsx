@@ -5,6 +5,8 @@ import { X, History, RotateCcw, Check, AlertCircle, Clock } from 'lucide-react';
 
 interface InlineRevisionDrawerProps {
   slug: string;
+  pageId?: string;
+  entityType?: 'tool' | 'page';
   isOpen: boolean;
   onClose: () => void;
   onRevisionRestored: () => void;
@@ -12,6 +14,8 @@ interface InlineRevisionDrawerProps {
 
 export function InlineRevisionDrawer({
   slug,
+  pageId,
+  entityType = 'tool',
   isOpen,
   onClose,
   onRevisionRestored,
@@ -25,13 +29,17 @@ export function InlineRevisionDrawer({
     if (isOpen) {
       loadRevisions();
     }
-  }, [isOpen, slug]);
+  }, [isOpen, slug, pageId]);
 
   const loadRevisions = async () => {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch(`/api/admin/tools/${slug}/revisions`);
+      const url =
+        entityType === 'page' && pageId
+          ? `/api/admin/pages/${pageId}/revisions`
+          : `/api/admin/tools/${slug}/revisions`;
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setRevisions(Array.isArray(data) ? data : data.revisions || []);
@@ -54,7 +62,11 @@ export function InlineRevisionDrawer({
     setRestoringId(revisionId);
     setMessage(null);
     try {
-      const res = await fetch(`/api/admin/tools/${slug}/revisions/${revisionId}/restore`, {
+      const restoreUrl =
+        entityType === 'page' && pageId
+          ? `/api/admin/pages/${pageId}/revisions/${revisionId}/restore`
+          : `/api/admin/tools/${slug}/revisions/${revisionId}/restore`;
+      const res = await fetch(restoreUrl, {
         method: 'POST',
       });
       if (res.ok) {

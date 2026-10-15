@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { requireAdminAuth } from '@/lib/admin/guard';
-import { publishPage, unpublishPage } from '@/lib/admin/services/page.service';
+import { getPageById, getPageBySlug, publishPage, unpublishPage } from '@/lib/admin/services/page.service';
+import { handleAdminApiError } from '@/lib/admin/api-error';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -15,14 +17,33 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const body = await req.json().catch(() => ({}));
     const action = body.action || 'publish';
 
+    let targetId = id;
+    let existing = await getPageById(id);
+    if (!existing && (id === 'home' || id === 'page-home')) {
+      existing = await getPageBySlug('home');
+      if (existing) targetId = existing.id;
+    }
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Page not found' }, { status: 404 });
+    }
+
     const page =
       action === 'unpublish'
-        ? await unpublishPage(id, auth.user)
-        : await publishPage(id, auth.user);
+        ? await unpublishPage(targetId, auth.user)
+        : await publishPage(targetId, auth.user);
+
+    // Invalidate Next.js route cache
+    const targetPath = page.slug === 'home' ? '/' : `/${page.slug}`;
+    try {
+      revalidatePath(targetPath);
+    } catch {
+      // Safe no-op outside Next.js request context (e.g. test environment)
+    }
 
     return NextResponse.json({ page });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Publish action failed.';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return handleAdminApiError(err);
   }
 }
+

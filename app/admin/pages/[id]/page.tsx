@@ -1077,11 +1077,19 @@ export default function AdminPageEditor({ params }: PageEditorProps) {
                 <input
                   type="text"
                   value={slug}
+                  disabled={page?.slug === 'home'}
                   onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, '-'))}
                   placeholder="about"
-                  className="w-full px-3.5 py-2 text-xs border border-[#CBD5E1] rounded-r-lg focus:outline-none focus:ring-2 focus:ring-[#124A57]"
+                  className={`w-full px-3.5 py-2 text-xs border border-[#CBD5E1] rounded-r-lg focus:outline-none focus:ring-2 focus:ring-[#124A57] ${
+                    page?.slug === 'home' ? 'bg-[#F1F5F9] text-[#64748B] cursor-not-allowed' : ''
+                  }`}
                 />
               </div>
+              {page?.slug === 'home' && (
+                <p className="text-[11px] text-[#2563EB] font-medium mt-1">
+                  Reserved homepage slug: maps to the root website path (/) and cannot be renamed.
+                </p>
+              )}
             </div>
 
             <div>

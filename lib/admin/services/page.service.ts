@@ -1,7 +1,137 @@
+import { revalidatePath } from 'next/cache';
 import { getDb } from '@/lib/db';
 import { CreatePageInput, UpdatePageInput, AdminUserSession } from '../types';
 import { createAuditLog } from './audit.service';
 import { validatePagePayload } from '../validation';
+
+export interface BootstrapHomepageResult {
+  created: boolean;
+  page: any;
+  message: string;
+}
+
+/**
+ * Safely and idempotently initializes the reserved 'home' page record.
+ * 1. If 'home' already exists, preserves all existing content, SEO, and revisions.
+ * 2. If 'home' is absent, creates the page, content, SEO, and initial revision snapshot.
+ * 3. Never overwrites or resets existing CMS data.
+ * 4. Fails safely if database persistence is unavailable.
+ */
+export async function bootstrapHomepage(author?: AdminUserSession): Promise<BootstrapHomepageResult> {
+  const db = getDb();
+
+  // 1. Check if homepage already exists
+  const existing = await db.page.findUnique({
+    where: { slug: 'home' },
+    include: {
+      content: true,
+      seo: true,
+    },
+  });
+
+  if (existing) {
+    return {
+      created: false,
+      page: existing,
+      message: "Homepage record ('home') already exists. Preserved existing content, SEO, and revisions.",
+    };
+  }
+
+  // 2. Default homepage SEO values aligned with existing public homepage defaults
+  const defaultTitle = 'Free Online File Tools – Convert, Compress & Edit Files Free';
+  const defaultDesc =
+    'Fast, secure, 100% free image and PDF conversion utilities. Convert JPG, PNG, WEBP, HEIC, PDF and compress documents with complete client-side privacy.';
+
+  try {
+    const page = await db.page.create({
+      data: {
+        slug: 'home',
+        name: 'Homepage',
+        status: 'PUBLISHED',
+        publishedAt: new Date(),
+        content: {
+          create: {
+            version: 1,
+            isPublished: true,
+            blocks: [] as any,
+            customCss: null,
+          },
+        },
+        seo: {
+          create: {
+            seoTitle: defaultTitle,
+            metaDescription: defaultDesc,
+            canonicalUrl: '/',
+            robotsIndex: true,
+            robotsFollow: true,
+            ogTitle: defaultTitle,
+            ogDescription: defaultDesc,
+            ogImage: '/images/og-image.png',
+            twitterTitle: defaultTitle,
+            twitterDescription: defaultDesc,
+            twitterImage: '/images/og-image.png',
+            schemaType: 'WebSite',
+          },
+        },
+      },
+      include: {
+        content: true,
+        seo: true,
+      },
+    });
+
+    // Create initial revision snapshot
+    await db.pageRevision.create({
+      data: {
+        pageId: page.id,
+        contentSnapshot: { blocks: [], customCss: null },
+        seoSnapshot: {
+          seoTitle: defaultTitle,
+          metaDescription: defaultDesc,
+          canonicalUrl: '/',
+          robotsIndex: true,
+          robotsFollow: true,
+          schemaType: 'WebSite',
+        },
+        authorId: author?.id || null,
+        reason: 'Initial homepage bootstrap',
+      },
+    });
+
+    await createAuditLog({
+      userId: author?.id || 'system-bootstrap',
+      action: 'PAGE_CREATED',
+      entityType: 'PAGE',
+      entityId: page.id,
+      metadata: { slug: 'home', name: 'Homepage', bootstrap: true },
+    });
+
+    return {
+      created: true,
+      page,
+      message: "Homepage record ('home') successfully initialized.",
+    };
+  } catch (err: unknown) {
+    // Concurrent attempt caught by unique constraint
+    const recheck = await db.page.findUnique({
+      where: { slug: 'home' },
+      include: {
+        content: true,
+        seo: true,
+      },
+    });
+
+    if (recheck) {
+      return {
+        created: false,
+        page: recheck,
+        message: "Homepage record ('home') already exists (concurrent initialization).",
+      };
+    }
+
+    throw err;
+  }
+}
 
 export async function getPages(options?: { status?: 'DRAFT' | 'PUBLISHED' }) {
   const db = getDb();
@@ -146,6 +276,12 @@ export async function updateDraftPage(
   if (input.name) updateData.name = input.name.trim();
   if (input.slug) {
     const cleanSlug = input.slug.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+    if (existing.slug === 'home' && cleanSlug !== 'home') {
+      throw new Error("Cannot rename the reserved 'home' page slug.");
+    }
+    if (existing.slug !== 'home' && cleanSlug === 'home') {
+      throw new Error("Cannot rename page to the reserved 'home' slug.");
+    }
     if (cleanSlug !== existing.slug) {
       const clash = await db.page.findUnique({ where: { slug: cleanSlug } });
       if (clash && clash.id !== id) {
@@ -271,6 +407,14 @@ export async function publishPage(id: string, author: AdminUserSession) {
     metadata: { slug: updated.slug },
   });
 
+  // Invalidate Next.js route cache
+  const targetPath = updated.slug === 'home' ? '/' : `/${updated.slug}`;
+  try {
+    revalidatePath(targetPath);
+  } catch {
+    // Safe no-op outside Next.js request context (e.g. CLI or unit test)
+  }
+
   return updated;
 }
 
@@ -302,7 +446,50 @@ export async function unpublishPage(id: string, author: AdminUserSession) {
     metadata: { slug: updated.slug },
   });
 
+  // Invalidate Next.js route cache
+  const targetPath = updated.slug === 'home' ? '/' : `/${updated.slug}`;
+  try {
+    revalidatePath(targetPath);
+  } catch {
+    // Safe no-op outside Next.js request context
+  }
+
   return updated;
+}
+
+/**
+ * Deletes a page and all dependent content.
+ * Prevents deleting the reserved 'home' page.
+ */
+export async function deletePage(id: string, author: AdminUserSession) {
+  const db = getDb();
+  const page = await db.page.findUnique({ where: { id } });
+  if (!page) {
+    throw new Error(`Page not found: ${id}`);
+  }
+
+  if (page.slug === 'home') {
+    throw new Error("Cannot delete the reserved 'home' page.");
+  }
+
+  await db.page.delete({ where: { id } });
+
+  await createAuditLog({
+    userId: author.id,
+    action: 'PAGE_DELETED',
+    entityType: 'PAGE',
+    entityId: id,
+    metadata: { slug: page.slug, name: page.name },
+  });
+
+  // Invalidate route cache
+  try {
+    revalidatePath(`/${page.slug}`);
+  } catch {
+    // Safe no-op
+  }
+
+  return { success: true, id, slug: page.slug };
 }
 
 export async function getPageRevisions(pageId: string) {

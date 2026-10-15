@@ -119,7 +119,7 @@ export async function listPosts(options?: ListBlogPostsOptions): Promise<{
  */
 export async function getPostById(id: string): Promise<BlogPostItem | null> {
   const db = getDb();
-  const post = await db.blogPost.findUnique({
+  let post = await db.blogPost.findUnique({
     where: { id },
     include: {
       author: true,
@@ -132,6 +132,22 @@ export async function getPostById(id: string): Promise<BlogPostItem | null> {
       },
     },
   });
+
+  if (!post) {
+    post = await db.blogPost.findUnique({
+      where: { slug: id },
+      include: {
+        author: true,
+        category: true,
+        tags: { include: { tag: true } },
+        seo: true,
+        revisions: {
+          include: { author: true },
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+  }
 
   if (!post) return null;
   return formatBlogPost(post);
@@ -258,14 +274,23 @@ export async function updateDraft(
   author: AdminUserSession
 ): Promise<BlogPostItem> {
   const db = getDb();
-  const existing = await db.blogPost.findUnique({
+  let existing = await db.blogPost.findUnique({
     where: { id },
     include: { seo: true, tags: true },
   });
 
   if (!existing) {
+    existing = await db.blogPost.findUnique({
+      where: { slug: id },
+      include: { seo: true, tags: true },
+    });
+  }
+
+  if (!existing) {
     throw new Error(`BlogPost not found: ${id}`);
   }
+
+  const postId = existing.id;
 
   const validation = validateBlogPostPayload({
     title: input.title !== undefined ? input.title : existing.title,
@@ -368,7 +393,7 @@ export async function updateDraft(
   }
 
   const updated = await db.blogPost.update({
-    where: { id },
+    where: { id: postId },
     data: updateData,
     include: {
       author: true,
@@ -379,13 +404,13 @@ export async function updateDraft(
   });
 
   // Snapshot revision
-  await createRevisionSnapshot(id, author.id, input.reason || 'Content update');
+  await createRevisionSnapshot(postId, author.id, input.reason || 'Content update');
 
   await createAuditLog({
     userId: author.id,
     action: 'BLOG_POST_UPDATED',
     entityType: 'BLOG_POST',
-    entityId: id,
+    entityId: postId,
     metadata: { title: updated.title, slug: updated.slug, status: updated.status },
   });
 
@@ -397,18 +422,22 @@ export async function updateDraft(
  */
 export async function deletePost(id: string, author: AdminUserSession): Promise<void> {
   const db = getDb();
-  const existing = await db.blogPost.findUnique({ where: { id } });
+  let existing = await db.blogPost.findUnique({ where: { id } });
+  if (!existing) {
+    existing = await db.blogPost.findUnique({ where: { slug: id } });
+  }
   if (!existing) {
     throw new Error(`BlogPost not found: ${id}`);
   }
 
-  await db.blogPost.delete({ where: { id } });
+  const postId = existing.id;
+  await db.blogPost.delete({ where: { id: postId } });
 
   await createAuditLog({
     userId: author.id,
     action: 'BLOG_POST_DELETED',
     entityType: 'BLOG_POST',
-    entityId: id,
+    entityId: postId,
     metadata: { title: existing.title, slug: existing.slug },
   });
 }
@@ -418,15 +447,19 @@ export async function deletePost(id: string, author: AdminUserSession): Promise<
  */
 export async function publishPost(id: string, author: AdminUserSession): Promise<BlogPostItem> {
   const db = getDb();
-  const existing = await db.blogPost.findUnique({ where: { id } });
+  let existing = await db.blogPost.findUnique({ where: { id } });
+  if (!existing) {
+    existing = await db.blogPost.findUnique({ where: { slug: id } });
+  }
   if (!existing) {
     throw new Error(`BlogPost not found: ${id}`);
   }
 
+  const postId = existing.id;
   const publishedAt = existing.publishedAt || new Date();
 
   const updated = await db.blogPost.update({
-    where: { id },
+    where: { id: postId },
     data: {
       status: 'PUBLISHED',
       publishedAt,

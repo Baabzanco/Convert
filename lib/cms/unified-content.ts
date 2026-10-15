@@ -344,6 +344,46 @@ export const BLOCK_REGISTRY: Record<ContentBlockType, BlockDefinition> = {
       height: 32,
     },
   },
+  popular_tools: {
+    type: 'popular_tools',
+    label: 'Popular Tools Grid',
+    category: 'conversion',
+    description: 'Curated showcase of high-converting file transformation utilities.',
+    iconName: 'Wrench',
+    defaultContent: {
+      title: 'Popular Conversion Tools',
+      subtitle: 'Fast, secure, and completely free in-browser file converters.',
+      tools: [],
+    },
+  },
+  hubs: {
+    type: 'hubs',
+    label: 'Format Hubs Section',
+    category: 'layout',
+    description: 'Explore conversion categories organized by document and media formats.',
+    iconName: 'FolderOpen',
+    defaultContent: {
+      title: 'Explore All Tools & Formats',
+      subtitle: 'Browse specialized converters organized by document and image type.',
+    },
+  },
+  pricing: {
+    type: 'pricing',
+    label: 'Free & Transparent Guarantee',
+    category: 'conversion',
+    description: '100% free pricing guarantee and client-side benefits banner.',
+    iconName: 'Sparkles',
+    defaultContent: {
+      title: '100% Free Forever. No Hidden Fees.',
+      description: 'Convert24 is funded by optional donations and ethical sponsorships. No subscriptions, credit cards, or limits.',
+      features: [
+        'Unlimited conversions per day',
+        'No file size restrictions within device memory',
+        'No account required',
+        'Zero queue waiting times',
+      ],
+    },
+  },
 };
 
 export function getBlockDefinition(type: ContentBlockType): BlockDefinition {

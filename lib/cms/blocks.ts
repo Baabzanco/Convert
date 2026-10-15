@@ -21,6 +21,9 @@ export type ContentBlockType =
   | 'use_cases'
   | 'supported_formats'
   | 'technical_details'
+  | 'popular_tools'
+  | 'hubs'
+  | 'pricing'
   | 'spacer';
 
 export interface UniversalContentBlock {
@@ -84,6 +87,9 @@ export function normalizeBlock(block: any, defaultOrder = 0): UniversalContentBl
     'use_cases',
     'supported_formats',
     'technical_details',
+    'popular_tools',
+    'hubs',
+    'pricing',
     'spacer',
   ];
 

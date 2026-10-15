@@ -19,6 +19,7 @@ import { AdminUserSession } from '@/lib/admin/types';
 
 interface InlineEditorToolbarProps {
   slug: string;
+  previewUrl?: string;
   isEditing: boolean;
   isDirty: boolean;
   isPublished: boolean;
@@ -29,6 +30,7 @@ interface InlineEditorToolbarProps {
   onDiscard: () => void;
   onOpenRevisions: () => void;
   onOpenSeo?: () => void;
+  onOpenSharedSettings?: () => void;
   hasSeoOverride?: boolean;
   isSaving: boolean;
   isPublishing: boolean;
@@ -37,6 +39,7 @@ interface InlineEditorToolbarProps {
 
 export function InlineEditorToolbar({
   slug,
+  previewUrl,
   isEditing,
   isDirty,
   isPublished,
@@ -47,6 +50,7 @@ export function InlineEditorToolbar({
   onDiscard,
   onOpenRevisions,
   onOpenSeo,
+  onOpenSharedSettings,
   hasSeoOverride = false,
   isSaving,
   isPublishing,
@@ -239,6 +243,19 @@ export function InlineEditorToolbar({
                 </button>
               )}
 
+              {/* Shared Site Configuration */}
+              {onOpenSharedSettings && (
+                <button
+                  type="button"
+                  onClick={onOpenSharedSettings}
+                  title="Configure global shared site settings (brand, header, footer)"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <Globe className="w-3.5 h-3.5 text-blue-300" />
+                  <span>Site Config</span>
+                </button>
+              )}
+
               {/* Revisions History Drawer */}
               <button
                 type="button"
@@ -268,7 +285,7 @@ export function InlineEditorToolbar({
           {/* Preview Direct Link */}
           {!isPreviewMode && (
             <a
-              href={`/tools/${slug}?preview=true`}
+              href={previewUrl || `/tools/${slug}?preview=true`}
               target="_blank"
               rel="noopener noreferrer"
               title="Open draft preview in new window (noindex protected)"
