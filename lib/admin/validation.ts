@@ -7,9 +7,18 @@ import {
   ToolHowToStep,
   ToolFeatureItem,
   ToolFaqItem,
+  UpdateSettingsInput,
+  HeaderNavItem,
+  FooterGroupItem,
+  FooterLinkItem,
 } from './types';
 import { getToolBySlug } from '@/lib/tools';
 import { normalizeBlock } from '@/lib/cms/blocks';
+import {
+  sanitizeContainerSettings,
+  isSupportedContainerChildType,
+  MAX_CONTAINER_DEPTH,
+} from '@/lib/cms/container-contract';
 
 export interface ValidationIssue {
   field: string;
@@ -72,6 +81,303 @@ export function sanitizeRichTextHtml(rawHtml?: string | null): string {
 
   return sanitized;
 }
+
+/**
+ * Comprehensive HTML sanitizer for Custom HTML CMS blocks.
+ * Protects against XSS, DOM-based attacks, malicious embeds, and script injections
+ * while preserving safe layout structures, tables, headings, paragraphs, lists, links, images, and semantic tags.
+ *
+ * Deterministic: Produces character-for-character identical output across SSR (Node.js) and CSR (Browser),
+ * preventing React hydration mismatches. Document-level elements (<title>, <head>, <html>, <body>, <meta>, <!doctype>)
+ * are safely handled or stripped so only safe body fragments are rendered.
+ */
+export function sanitizeCustomHtml(rawHtml?: string | null): string {
+  if (!rawHtml || typeof rawHtml !== 'string') return '';
+
+  let sanitized = rawHtml;
+
+  // 1. Strip document-level metadata and DOCTYPE tags completely
+  // These belong only in the root HTML document (<head>), never in CMS body fragments.
+  // When parsed in browsers, <title> or <head> tags are moved by DOMParser into document.head,
+  // causing client-rendered body HTML to differ from server-rendered body HTML (hydration mismatch).
+  sanitized = sanitized.replace(/<!doctype[^>]*>/gi, '');
+  sanitized = sanitized.replace(/<\s*title\b[^>]*>[\s\S]*?<\s*\/\s*title\s*>/gi, '');
+  sanitized = sanitized.replace(/<\s*title\b[^>]*\/?>/gi, '');
+  sanitized = sanitized.replace(/<\s*head\b[^>]*>[\s\S]*?<\s*\/\s*head\s*>/gi, '');
+  sanitized = sanitized.replace(/<\s*head\b[^>]*\/?>/gi, '');
+
+  // Strip document wrapper tags (html, body) while preserving their inner content
+  sanitized = sanitized.replace(/<\s*\/?\s*(html|body)\b[^>]*>/gi, '');
+
+  // 2. Recursive removal of dangerous elements and tags until fixed point
+  // Eliminates nested evasion attempts such as <scr<script>ipt> or <iframe src=...
+  const dangerousTags = [
+    'script',
+    'iframe',
+    'frame',
+    'frameset',
+    'object',
+    'embed',
+    'applet',
+    'style',
+    'link',
+    'meta',
+    'base',
+    'form',
+    'input',
+    'button',
+    'select',
+    'textarea',
+    'svg',
+    'math',
+    'template',
+    'dialog',
+  ];
+
+  const tagPattern = new RegExp(
+    `<\\s*(${dangerousTags.join('|')})\\b[\\s\\S]*?<\\s*\\/\\s*\\1\\s*>`,
+    'gi'
+  );
+  const selfClosingPattern = new RegExp(
+    `<\\s*(${dangerousTags.join('|')})\\b[^>]*\\/?>`,
+    'gi'
+  );
+
+  let prev = '';
+  do {
+    prev = sanitized;
+    sanitized = sanitized.replace(tagPattern, '');
+    sanitized = sanitized.replace(selfClosingPattern, '');
+  } while (sanitized !== prev);
+
+  // 3. Strip CDATA sections and HTML comments to prevent comment-hiding attacks
+  do {
+    prev = sanitized;
+    sanitized = sanitized.replace(/<!--[\s\S]*?-->/gi, '');
+    sanitized = sanitized.replace(/<!\[CDATA\[[\s\S]*?\]\]>/gi, '');
+  } while (sanitized !== prev);
+
+  // 4. Recursive removal of inline event handlers (on* attributes like onerror, onload, onclick, ontoggle)
+  // Handles quoted, unquoted, whitespace-separated, and newline variations
+  do {
+    prev = sanitized;
+    sanitized = sanitized.replace(/\s+on[a-zA-Z0-9_-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+    sanitized = sanitized.replace(/\s+on[a-zA-Z0-9_-]+\s*(?=[>/\s])/gi, '');
+  } while (sanitized !== prev);
+
+  // 5. Sanitize dangerous URL schemes in attributes (href, src, cite, poster, background, action)
+  // Strips javascript:, vbscript:, and data:text/html (including entity-encoded variations)
+  sanitized = sanitized.replace(
+    /\s+(href|src|cite|poster|background|action)\s*=\s*(["'])([\s\S]*?)\2/gi,
+    (match, attr, quote, urlValue) => {
+      // Decode HTML entities in URL for safe comparison
+      const decoded = urlValue
+        .replace(/&#x([0-9a-f]+);?/gi, (_: any, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/&#([0-9]+);?/gi, (_: any, dec: string) => String.fromCharCode(parseInt(dec, 10)))
+        .replace(/[\u0000-\u001F\u007F-\u009F\s]/g, '')
+        .toLowerCase();
+
+      if (
+        decoded.startsWith('javascript:') ||
+        decoded.startsWith('vbscript:') ||
+        decoded.startsWith('data:text/html') ||
+        decoded.startsWith('data:application/')
+      ) {
+        return ` ${attr}="#"`;
+      }
+      return match;
+    }
+  );
+
+  // 6. Sanitize style attributes (remove expression(), url(), -moz-binding, @import, behavior)
+  sanitized = sanitized.replace(
+    /\s+style\s*=\s*(["'])([\s\S]*?)\1/gi,
+    (match, quote, styleContent) => {
+      let cleanStyle = styleContent
+        .replace(/expression\s*\([^)]*\)/gi, '')
+        .replace(/url\s*\(\s*["']?\s*javascript:[^)]*\)/gi, '')
+        .replace(/url\s*\([^)]*\)/gi, 'none')
+        .replace(/@import\s+[^;]+;/gi, '')
+        .replace(/-moz-binding\s*:[^;]+;/gi, '')
+        .replace(/behavior\s*:[^;]+;/gi, '');
+
+      return ` style=${quote}${cleanStyle}${quote}`;
+    }
+  );
+
+  // 7. Ensure target="_blank" links have rel="noopener noreferrer" deterministically
+  sanitized = sanitized.replace(
+    /<a\b([^>]*\btarget\s*=\s*["']_blank["'][^>]*)>/gi,
+    (match, attrs) => {
+      if (!/rel\s*=/i.test(attrs)) {
+        return `<a${attrs} rel="noopener noreferrer">`;
+      }
+      return match;
+    }
+  );
+
+  return sanitized.trim();
+}
+
+/**
+ * Extracts <style> tag contents from HTML and returns cleaned HTML and combined CSS.
+ * Allows editors to paste HTML containing <style> tags without breaking the layout
+ * or losing styles, separating them into scoped CSS.
+ */
+export function extractStylesFromHtml(rawHtml?: string | null): { html: string; extractedCss: string } {
+  if (!rawHtml || typeof rawHtml !== 'string') return { html: '', extractedCss: '' };
+
+  const extractedStyles: string[] = [];
+  const cleanHtml = rawHtml.replace(/<\s*style\b[^>]*>([\s\S]*?)<\s*\/\s*style\s*>/gi, (_, cssContent) => {
+    if (cssContent && cssContent.trim()) {
+      extractedStyles.push(cssContent.trim());
+    }
+    return '';
+  });
+
+  return {
+    html: cleanHtml.trim(),
+    extractedCss: extractedStyles.join('\n\n'),
+  };
+}
+
+/**
+ * Helper to scope a CSS selector string to a specific container ID or class.
+ */
+function scopeCssSelector(selector: string, scopePrefix: string): string {
+  const parts: string[] = [];
+  let current = '';
+  let parenDepth = 0;
+
+  for (let i = 0; i < selector.length; i++) {
+    const char = selector[i];
+    if (char === '(') parenDepth++;
+    else if (char === ')') parenDepth = Math.max(0, parenDepth - 1);
+
+    if (char === ',' && parenDepth === 0) {
+      parts.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) {
+    parts.push(current.trim());
+  }
+
+  const scopedParts = parts.map((part) => {
+    const trimmed = part.trim();
+    if (!trimmed) return '';
+
+    // If selector targets :root, html, or body, redirect to scopePrefix
+    if (/^(:root|html|body)\b/i.test(trimmed)) {
+      return trimmed.replace(/^(:root|html|body)\b/i, scopePrefix);
+    }
+
+    // If already starts with the scope prefix, do not duplicate
+    if (trimmed.startsWith(scopePrefix)) {
+      return trimmed;
+    }
+
+    // Otherwise, prefix selector with scopePrefix
+    return `${scopePrefix} ${trimmed}`;
+  });
+
+  return scopedParts.filter(Boolean).join(', ');
+}
+
+/**
+ * Sanitizes and scopes custom CSS to a block ID container (e.g. #custom-html-blk-123).
+ * Prevents styles from leaking to header, footer, editor, or neighboring blocks.
+ * Neutralizes @import, external url() tracking, expressions, and angle brackets.
+ */
+export function scopeAndSanitizeCss(rawCss?: string | null, scopeId?: string): string {
+  if (!rawCss || typeof rawCss !== 'string') return '';
+  const scopePrefix = scopeId ? (scopeId.startsWith('#') ? scopeId : `#${scopeId}`) : '.custom-html-block';
+
+  // 1. Sanitize raw CSS
+  let sanitized = rawCss;
+
+  // Remove HTML comments <!-- ... --> and CDATA
+  sanitized = sanitized.replace(/<!--[\s\S]*?-->/gi, '');
+  sanitized = sanitized.replace(/<!\[CDATA\[[\s\S]*?\]\]>/gi, '');
+
+  // Remove any tag-like sequences < ... > and standalone angle brackets
+  sanitized = sanitized.replace(/<[^>]*>/gi, '');
+  sanitized = sanitized.replace(/[<>]/g, '');
+
+  // Remove @import to prevent unauthorized external CSS loading
+  sanitized = sanitized.replace(/@import\s+[^;]+;/gi, '');
+
+  // Remove expressions and legacy script injections
+  sanitized = sanitized.replace(/expression\s*\([^)]*\)/gi, '');
+  sanitized = sanitized.replace(/-moz-binding\s*:[^;]+;/gi, '');
+  sanitized = sanitized.replace(/behavior\s*:[^;]+;/gi, '');
+
+  // Remove/neutralize url() functions to prevent external asset tracking or javascript: injection
+  sanitized = sanitized.replace(/url\s*\([^)]*\)/gi, 'none');
+
+  // 2. Parse and scope selectors
+  let result = '';
+  let i = 0;
+  const len = sanitized.length;
+
+  while (i < len) {
+    // Skip whitespace
+    while (i < len && /\s/.test(sanitized[i])) i++;
+    if (i >= len) break;
+
+    // Read until '{'
+    const openBrace = sanitized.indexOf('{', i);
+    if (openBrace === -1) {
+      break;
+    }
+
+    const header = sanitized.substring(i, openBrace).trim();
+    i = openBrace + 1;
+
+    if (header.startsWith('@media') || header.startsWith('@supports')) {
+      // Find matching closing brace for this at-rule block
+      let depth = 1;
+      const atRuleBodyStart = i;
+      while (i < len && depth > 0) {
+        if (sanitized[i] === '{') depth++;
+        else if (sanitized[i] === '}') depth--;
+        i++;
+      }
+      const atRuleBody = sanitized.substring(atRuleBodyStart, i - 1);
+      const scopedInner = scopeAndSanitizeCss(atRuleBody, scopeId);
+      if (scopedInner.trim()) {
+        result += `${header} {\n  ${scopedInner.replace(/\n/g, '\n  ')}\n}\n`;
+      }
+    } else if (header.startsWith('@keyframes') || header.startsWith('@-webkit-keyframes')) {
+      // Keyframe animations: preserve keyframe stops as-is
+      let depth = 1;
+      const kfBodyStart = i;
+      while (i < len && depth > 0) {
+        if (sanitized[i] === '{') depth++;
+        else if (sanitized[i] === '}') depth--;
+        i++;
+      }
+      const kfBody = sanitized.substring(kfBodyStart, i - 1);
+      result += `${header} {\n  ${kfBody.trim()}\n}\n`;
+    } else {
+      // Regular CSS rule
+      const closeBrace = sanitized.indexOf('}', i);
+      if (closeBrace === -1) break;
+      const declarations = sanitized.substring(i, closeBrace).trim();
+      i = closeBrace + 1;
+
+      if (header && declarations) {
+        const scopedHeader = scopeCssSelector(header, scopePrefix);
+        result += `${scopedHeader} {\n  ${declarations}\n}\n`;
+      }
+    }
+  }
+
+  return result.trim();
+}
+
 
 /**
  * Sanitizes custom CSS to prevent style tag escaping, script injection, and expression attacks.
@@ -224,17 +530,21 @@ export function validateSeo(seo?: PageSeoInput | null): ValidationReport {
 /**
  * Validates a structured block and sanitizes text/HTML fields.
  */
-export function validateAndSanitizeBlock(block: any): {
+export function validateAndSanitizeBlock(block: any, currentDepth = 0): {
   isValid: boolean;
   block?: any;
+  sanitizedBlock?: any;
   error?: string;
+  errors: string[];
 } {
+  const fail = (msg: string) => ({ isValid: false, error: msg, errors: [msg] });
+
   if (!block || typeof block !== 'object') {
-    return { isValid: false, error: 'Block must be an object.' };
+    return fail('Block must be an object.');
   }
 
   // Normalize block into standard UniversalContentBlock structure with legacy root fields
-  const normalized = normalizeBlock(block);
+  const normalized = normalizeBlock(block, 0, currentDepth);
   const type = normalized.type;
   const content = normalized.content || {};
 
@@ -242,22 +552,138 @@ export function validateAndSanitizeBlock(block: any): {
   if (type === 'cta' || type === 'link') {
     const href = String(content.href || normalized.href || '').trim();
     if (href && !isSafeUrl(href)) {
-      return { isValid: false, error: `Unsafe URL detected in ${type}: ${href}` };
+      return fail(`Unsafe URL detected in ${type}: ${href}`);
     }
     content.href = href || '#';
+
+    // Also check secondaryHref on cta
+    if (type === 'cta') {
+      const secondaryHref = String(content.secondaryHref || normalized.secondaryHref || '').trim();
+      if (secondaryHref && !isSafeUrl(secondaryHref)) {
+        return fail(`Unsafe secondary URL detected in cta: ${secondaryHref}`);
+      }
+      if (secondaryHref) {
+        content.secondaryHref = secondaryHref;
+      }
+    }
+  }
+
+  if (type === 'pricing') {
+    const buttonHref = String(content.buttonHref || normalized.buttonHref || '').trim();
+    if (buttonHref && !isSafeUrl(buttonHref)) {
+      return fail(`Unsafe button URL detected in pricing: ${buttonHref}`);
+    }
+    if (buttonHref) content.buttonHref = buttonHref;
+  }
+
+  if (type === 'popular_tools') {
+    const exploreHref = String(content.exploreHref || normalized.exploreHref || '').trim();
+    if (exploreHref && !isSafeUrl(exploreHref)) {
+      return fail(`Unsafe explore URL detected in popular_tools: ${exploreHref}`);
+    }
+    if (exploreHref) content.exploreHref = exploreHref;
+  }
+
+  if (type === 'hubs') {
+    const imageHubHref = String(content.imageHubHref || normalized.imageHubHref || '').trim();
+    if (imageHubHref && !isSafeUrl(imageHubHref)) {
+      return fail(`Unsafe image hub URL detected in hubs: ${imageHubHref}`);
+    }
+    const pdfHubHref = String(content.pdfHubHref || normalized.pdfHubHref || '').trim();
+    if (pdfHubHref && !isSafeUrl(pdfHubHref)) {
+      return fail(`Unsafe PDF hub URL detected in hubs: ${pdfHubHref}`);
+    }
   }
 
   if (type === 'image') {
     const src = String(content.src || normalized.src || '').trim();
     if (src && !isSafeUrl(src)) {
-      return { isValid: false, error: `Unsafe Image URL detected: ${src}` };
+      return fail(`Unsafe Image URL detected: ${src}`);
     }
     content.src = src || '';
   }
 
-  // HTML Sanitization for rich text
-  if (type === 'rich_text' && (content.html !== undefined || normalized.html !== undefined)) {
+  // HTML Sanitization for rich text and intro
+  if ((type === 'rich_text' || type === 'intro') && (content.html !== undefined || normalized.html !== undefined)) {
     content.html = sanitizeRichTextHtml(content.html || normalized.html || '');
+  }
+
+  // Custom HTML block validation
+  if (type === 'custom_html') {
+    if (content.html !== undefined && typeof content.html !== 'string') {
+      return fail('Custom HTML content must be a string.');
+    }
+    let rawHtml = String(content.html !== undefined ? content.html : (normalized.html || ''));
+    let rawCss = String(content.css !== undefined ? content.css : (normalized.css || ''));
+
+    // If HTML contains <style> tags, extract them into rawCss so they are scoped and preserved
+    if (/<style\b/i.test(rawHtml)) {
+      const extracted = extractStylesFromHtml(rawHtml);
+      rawHtml = extracted.html;
+      if (extracted.extractedCss) {
+        rawCss = rawCss ? `${rawCss}\n\n${extracted.extractedCss}` : extracted.extractedCss;
+      }
+    }
+
+    if (rawHtml.length > 200000) {
+      return fail('Custom HTML exceeds maximum allowed length of 200,000 characters (200KB).');
+    }
+    if (rawCss.length > 50000) {
+      return fail('Custom CSS exceeds maximum allowed length of 50,000 characters.');
+    }
+
+    content.html = sanitizeCustomHtml(rawHtml);
+    content.css = rawCss ? scopeAndSanitizeCss(rawCss, `custom-html-${normalized.id}`) : '';
+    if (content.caption || normalized.caption) {
+      content.caption = String(content.caption || normalized.caption || '').replace(/<[^>]*>/g, '').trim();
+    }
+  }
+
+  // Container block validation & recursive child validation
+  if (type === 'container') {
+    if (currentDepth > MAX_CONTAINER_DEPTH) {
+      return fail(`Container nesting depth cannot exceed ${MAX_CONTAINER_DEPTH}.`);
+    }
+
+    normalized.settings = sanitizeContainerSettings(normalized.settings || content.settings);
+    content.settings = { ...normalized.settings };
+
+    const rawChildBlocks = Array.isArray(block.content?.blocks)
+      ? block.content.blocks
+      : Array.isArray(block.content?.children)
+      ? block.content.children
+      : Array.isArray(block.blocks)
+      ? block.blocks
+      : Array.isArray(block.children)
+      ? block.children
+      : Array.isArray(content.blocks)
+      ? content.blocks
+      : Array.isArray(normalized.blocks)
+      ? normalized.blocks
+      : [];
+
+    const sanitizedChildBlocks: any[] = [];
+    for (let i = 0; i < rawChildBlocks.length; i++) {
+      const child = rawChildBlocks[i];
+      if (!child || typeof child !== 'object') {
+        return fail(`Invalid child block [${i}] in container.`);
+      }
+      const childType = String(child.type || '').toLowerCase();
+      const support = isSupportedContainerChildType(childType, currentDepth + 1);
+      if (!support.supported) {
+        return fail(`Invalid child block [${i}] in container: ${support.reason || 'Unsupported child block type.'}`);
+      }
+
+      const childRes = validateAndSanitizeBlock(child, currentDepth + 1);
+      if (!childRes.isValid || !childRes.block) {
+        return fail(`Error in container child block [${i}]: ${childRes.error || 'Invalid child block structure.'}`);
+      }
+      sanitizedChildBlocks.push(childRes.block);
+    }
+
+    content.blocks = sanitizedChildBlocks;
+    normalized.blocks = sanitizedChildBlocks;
+    normalized.children = sanitizedChildBlocks;
   }
 
   // Sync content back to root properties for backward-compatible rendering
@@ -268,6 +694,8 @@ export function validateAndSanitizeBlock(block: any): {
   return {
     isValid: true,
     block: normalized,
+    sanitizedBlock: normalized,
+    errors: [],
   };
 }
 
@@ -746,6 +1174,248 @@ export function validateTagPayload(input: { name?: string; slug?: string }): {
       name,
       slug,
     },
+    report: {
+      isValid: errors.length === 0,
+      errors,
+      warnings,
+    },
+  };
+}
+
+/**
+ * Validates and sanitizes site settings, including Header and Footer configuration.
+ */
+export function validateSettingsPayload(input: any): {
+  isValid: boolean;
+  sanitized: UpdateSettingsInput;
+  report: ValidationReport;
+} {
+  const errors: ValidationIssue[] = [];
+  const warnings: ValidationIssue[] = [];
+
+  const sanitized: UpdateSettingsInput = {};
+
+  if (!input || typeof input !== 'object') {
+    return {
+      isValid: false,
+      sanitized: {},
+      report: {
+        isValid: false,
+        errors: [{ field: 'settings', message: 'Settings payload must be an object.' }],
+        warnings: [],
+      },
+    };
+  }
+
+  // Site name
+  if (input.siteName !== undefined) {
+    const raw = String(input.siteName).replace(/<[^>]*>/g, '').trim();
+    if (raw.length > 100) {
+      errors.push({ field: 'siteName', message: 'Site name cannot exceed 100 characters.' });
+    }
+    sanitized.siteName = raw;
+  }
+
+  // Site URL
+  if (input.siteUrl !== undefined) {
+    const raw = String(input.siteUrl).trim();
+    if (raw && !isSafeUrl(raw)) {
+      errors.push({ field: 'siteUrl', message: 'Site URL must be a valid, safe URL (http/https).' });
+    }
+    sanitized.siteUrl = raw;
+  }
+
+  // Site Logo
+  if (input.siteLogo !== undefined) {
+    if (input.siteLogo === null || input.siteLogo === '') {
+      sanitized.siteLogo = null;
+    } else {
+      const raw = String(input.siteLogo).trim();
+      if (!isSafeUrl(raw)) {
+        errors.push({ field: 'siteLogo', message: 'Site logo URL is invalid or unsafe.' });
+      }
+      sanitized.siteLogo = raw;
+    }
+  }
+
+  // Header Tagline
+  if (input.headerTagline !== undefined) {
+    if (input.headerTagline === null || input.headerTagline === '') {
+      sanitized.headerTagline = null;
+    } else {
+      const raw = String(input.headerTagline).replace(/<[^>]*>/g, '').trim();
+      if (raw.length > 200) {
+        errors.push({ field: 'headerTagline', message: 'Header tagline cannot exceed 200 characters.' });
+      }
+      sanitized.headerTagline = raw;
+    }
+  }
+
+  // Header CTA
+  if (input.headerCtaLabel !== undefined) {
+    sanitized.headerCtaLabel = input.headerCtaLabel ? String(input.headerCtaLabel).replace(/<[^>]*>/g, '').trim() : null;
+  }
+  if (input.headerCtaLink !== undefined) {
+    const raw = input.headerCtaLink ? String(input.headerCtaLink).trim() : '';
+    if (raw && !isSafeUrl(raw)) {
+      errors.push({ field: 'headerCtaLink', message: 'Header CTA link is invalid or unsafe.' });
+    }
+    sanitized.headerCtaLink = raw || null;
+  }
+  if (input.headerCtaVisible !== undefined) {
+    sanitized.headerCtaVisible = Boolean(input.headerCtaVisible);
+  }
+
+  // Header Navigation Items
+  if (input.headerNav !== undefined) {
+    if (!Array.isArray(input.headerNav)) {
+      errors.push({ field: 'headerNav', message: 'Header navigation must be an array.' });
+    } else {
+      const navItems: HeaderNavItem[] = [];
+      for (let i = 0; i < input.headerNav.length; i++) {
+        const item = input.headerNav[i];
+        if (!item || typeof item !== 'object') continue;
+        const label = String(item.label || '').replace(/<[^>]*>/g, '').trim();
+        const href = String(item.href || item.destination || '').trim();
+
+        if (!label) {
+          errors.push({ field: `headerNav[${i}].label`, message: 'Navigation item label is required.' });
+        } else if (label.length > 60) {
+          errors.push({ field: `headerNav[${i}].label`, message: 'Navigation item label cannot exceed 60 characters.' });
+        }
+
+        if (!href) {
+          errors.push({ field: `headerNav[${i}].href`, message: 'Navigation item destination link is required.' });
+        } else if (!isSafeUrl(href)) {
+          errors.push({ field: `headerNav[${i}].href`, message: `Navigation link '${href}' is unsafe or malformed.` });
+        }
+
+        navItems.push({
+          id: item.id || `nav-${i + 1}-${Date.now()}`,
+          label,
+          href,
+          order: typeof item.order === 'number' ? item.order : i,
+          visible: item.visible !== false,
+          openNewTab: Boolean(item.openNewTab),
+          isExternal: Boolean(item.isExternal || href.startsWith('http://') || href.startsWith('https://')),
+        });
+      }
+      sanitized.headerNav = navItems;
+    }
+  }
+
+  // Footer Description
+  if (input.footerDescription !== undefined) {
+    sanitized.footerDescription = input.footerDescription ? String(input.footerDescription).replace(/<[^>]*>/g, '').trim() : null;
+  }
+
+  // Copyright Text
+  if (input.copyrightText !== undefined) {
+    sanitized.copyrightText = input.copyrightText ? String(input.copyrightText).replace(/<[^>]*>/g, '').trim() : null;
+  }
+
+  // Trust Text
+  if (input.trustText !== undefined) {
+    sanitized.trustText = input.trustText ? String(input.trustText).replace(/<[^>]*>/g, '').trim() : null;
+  }
+
+  // Footer Groups
+  if (input.footerGroups !== undefined) {
+    if (!Array.isArray(input.footerGroups)) {
+      errors.push({ field: 'footerGroups', message: 'Footer groups must be an array.' });
+    } else {
+      const groups: FooterGroupItem[] = [];
+      for (let gIdx = 0; gIdx < input.footerGroups.length; gIdx++) {
+        const group = input.footerGroups[gIdx];
+        if (!group || typeof group !== 'object') continue;
+        const title = String(group.title || '').replace(/<[^>]*>/g, '').trim();
+        if (!title) {
+          errors.push({ field: `footerGroups[${gIdx}].title`, message: 'Footer group title is required.' });
+        }
+
+        const links: FooterLinkItem[] = [];
+        if (Array.isArray(group.links)) {
+          for (let lIdx = 0; lIdx < group.links.length; lIdx++) {
+            const link = group.links[lIdx];
+            if (!link || typeof link !== 'object') continue;
+            const lLabel = String(link.label || '').replace(/<[^>]*>/g, '').trim();
+            const lHref = String(link.href || '').trim();
+
+            if (!lLabel) {
+              errors.push({ field: `footerGroups[${gIdx}].links[${lIdx}].label`, message: 'Link label is required.' });
+            }
+            if (!lHref) {
+              errors.push({ field: `footerGroups[${gIdx}].links[${lIdx}].href`, message: 'Link href is required.' });
+            } else if (!isSafeUrl(lHref)) {
+              errors.push({ field: `footerGroups[${gIdx}].links[${lIdx}].href`, message: `Footer link '${lHref}' is unsafe or malformed.` });
+            }
+
+            links.push({
+              label: lLabel,
+              href: lHref,
+              openNewTab: Boolean(link.openNewTab),
+            });
+          }
+        }
+
+        groups.push({ title, links });
+      }
+      sanitized.footerGroups = groups;
+    }
+  }
+
+  // Social Links
+  if (input.socialLinks !== undefined) {
+    if (input.socialLinks === null) {
+      sanitized.socialLinks = null;
+    } else if (typeof input.socialLinks === 'object') {
+      const cleanedLinks: Record<string, string> = {};
+      for (const [platform, rawUrl] of Object.entries(input.socialLinks)) {
+        if (!rawUrl || typeof rawUrl !== 'string') continue;
+        const trimmed = rawUrl.trim();
+        if (trimmed) {
+          if (!isSafeUrl(trimmed)) {
+            errors.push({ field: `socialLinks.${platform}`, message: `Social link for '${platform}' is unsafe.` });
+          } else {
+            cleanedLinks[platform] = trimmed;
+          }
+        }
+      }
+      sanitized.socialLinks = cleanedLinks;
+    }
+  }
+
+  // SEO fields
+  if (input.defaultSeoTitle !== undefined) {
+    sanitized.defaultSeoTitle = input.defaultSeoTitle ? String(input.defaultSeoTitle).replace(/<[^>]*>/g, '').trim() : null;
+  }
+  if (input.defaultMetaDescription !== undefined) {
+    sanitized.defaultMetaDescription = input.defaultMetaDescription ? String(input.defaultMetaDescription).replace(/<[^>]*>/g, '').trim() : null;
+  }
+  if (input.defaultOgImage !== undefined) {
+    const raw = input.defaultOgImage ? String(input.defaultOgImage).trim() : '';
+    if (raw && !isSafeUrl(raw)) {
+      errors.push({ field: 'defaultOgImage', message: 'OG image URL is invalid or unsafe.' });
+    }
+    sanitized.defaultOgImage = raw || null;
+  }
+  if (input.defaultTwitterImage !== undefined) {
+    const raw = input.defaultTwitterImage ? String(input.defaultTwitterImage).trim() : '';
+    if (raw && !isSafeUrl(raw)) {
+      errors.push({ field: 'defaultTwitterImage', message: 'Twitter image URL is invalid or unsafe.' });
+    }
+    sanitized.defaultTwitterImage = raw || null;
+  }
+  if (input.googleAnalyticsId !== undefined) {
+    sanitized.googleAnalyticsId = input.googleAnalyticsId ? String(input.googleAnalyticsId).replace(/<[^>]*>/g, '').trim() : null;
+  }
+  if (input.googleAdSenseId !== undefined) {
+    sanitized.googleAdSenseId = input.googleAdSenseId ? String(input.googleAdSenseId).replace(/<[^>]*>/g, '').trim() : null;
+  }
+
+  return {
+    isValid: errors.length === 0,
+    sanitized,
     report: {
       isValid: errors.length === 0,
       errors,

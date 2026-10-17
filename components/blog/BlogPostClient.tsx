@@ -489,7 +489,7 @@ export default function BlogPostClient({ post, slug, jsonLd }: BlogPostClientPro
       <InlineRevisionDrawer
         slug={post.slug}
         pageId={postRecord?.id || post.id}
-        entityType="page"
+        entityType="blog"
         isOpen={isRevisionsOpen}
         onClose={() => setIsRevisionsOpen(false)}
         onRevisionRestored={() => {

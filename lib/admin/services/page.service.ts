@@ -147,13 +147,26 @@ export async function getPages(options?: { status?: 'DRAFT' | 'PUBLISHED' }) {
 
 export async function getPageById(id: string) {
   const db = getDb();
-  return db.page.findUnique({
+  let page = await db.page.findUnique({
     where: { id },
     include: {
       content: true,
       seo: true,
     },
   });
+
+  if (!page) {
+    const slugCandidate = id.startsWith('page-') ? id.replace(/^page-/, '') : id;
+    page = await db.page.findUnique({
+      where: { slug: slugCandidate },
+      include: {
+        content: true,
+        seo: true,
+      },
+    });
+  }
+
+  return page;
 }
 
 export async function getPageBySlug(slug: string, publishedOnly = false) {
@@ -256,14 +269,24 @@ export async function updateDraftPage(
   author: AdminUserSession
 ) {
   const db = getDb();
-  const existing = await db.page.findUnique({
+  let existing = await db.page.findUnique({
     where: { id },
     include: { content: true, seo: true },
   });
 
   if (!existing) {
+    const slugCandidate = id.startsWith('page-') ? id.replace(/^page-/, '') : id;
+    existing = await db.page.findUnique({
+      where: { slug: slugCandidate },
+      include: { content: true, seo: true },
+    });
+  }
+
+  if (!existing) {
     throw new Error(`Page not found: ${id}`);
   }
+
+  const actualPageId = existing.id;
 
   const validation = validatePagePayload(input);
   if (!validation.isValid) {
@@ -284,7 +307,7 @@ export async function updateDraftPage(
     }
     if (cleanSlug !== existing.slug) {
       const clash = await db.page.findUnique({ where: { slug: cleanSlug } });
-      if (clash && clash.id !== id) {
+      if (clash && clash.id !== actualPageId) {
         throw new Error(`A page with slug '${cleanSlug}' already exists.`);
       }
       updateData.slug = cleanSlug;
@@ -292,7 +315,7 @@ export async function updateDraftPage(
   }
 
   const updatedPage = await db.page.update({
-    where: { id },
+    where: { id: actualPageId },
     data: updateData,
   });
 
@@ -305,9 +328,16 @@ export async function updateDraftPage(
           : input.blocks
         : existing.content?.blocks || [];
 
-    await db.pageContent.update({
-      where: { pageId: id },
-      data: {
+    await db.pageContent.upsert({
+      where: { pageId: actualPageId },
+      create: {
+        pageId: actualPageId,
+        blocks: blocksToSave as any,
+        customCss: input.customCss !== undefined ? input.customCss : null,
+        version: 1,
+        isPublished: existing.status === 'PUBLISHED',
+      },
+      update: {
         blocks: blocksToSave as any,
         customCss: input.customCss !== undefined ? input.customCss : existing.content?.customCss || null,
         version: (existing.content?.version || 1) + 1,
@@ -317,9 +347,26 @@ export async function updateDraftPage(
 
   // Update SEO if provided
   if (input.seo) {
-    await db.pageSeo.update({
-      where: { pageId: id },
-      data: {
+    await db.pageSeo.upsert({
+      where: { pageId: actualPageId },
+      create: {
+        pageId: actualPageId,
+        seoTitle: input.seo.seoTitle || null,
+        metaDescription: input.seo.metaDescription || null,
+        canonicalUrl: input.seo.canonicalUrl || null,
+        robotsIndex: input.seo.robotsIndex !== false,
+        robotsFollow: input.seo.robotsFollow !== false,
+        ogTitle: input.seo.ogTitle || null,
+        ogDescription: input.seo.ogDescription || null,
+        ogImage: input.seo.ogImage || null,
+        twitterTitle: input.seo.twitterTitle || null,
+        twitterDescription: input.seo.twitterDescription || null,
+        twitterImage: input.seo.twitterImage || null,
+        schemaType: input.seo.schemaType || null,
+        schemaJson: (input.seo.schemaJson as any) ?? undefined,
+        focusKeyword: input.seo.focusKeyword || null,
+      },
+      update: {
         seoTitle: input.seo.seoTitle,
         metaDescription: input.seo.metaDescription,
         canonicalUrl: input.seo.canonicalUrl,
@@ -338,12 +385,12 @@ export async function updateDraftPage(
     });
   }
 
-  const fullPage = await getPageById(id);
+  const fullPage = await getPageById(actualPageId);
 
   // Snapshot revision
   await db.pageRevision.create({
     data: {
-      pageId: id,
+      pageId: actualPageId,
       contentSnapshot: fullPage?.content ? { blocks: fullPage.content.blocks, customCss: fullPage.content.customCss } : {},
       seoSnapshot: fullPage?.seo ? { ...fullPage.seo } : null,
       authorId: author.id,
@@ -355,7 +402,7 @@ export async function updateDraftPage(
     userId: author.id,
     action: 'PAGE_UPDATED',
     entityType: 'PAGE',
-    entityId: id,
+    entityId: actualPageId,
     metadata: { slug: fullPage?.slug, reason: input.reason },
   });
 
@@ -364,17 +411,27 @@ export async function updateDraftPage(
 
 export async function publishPage(id: string, author: AdminUserSession) {
   const db = getDb();
-  const page = await db.page.findUnique({
+  let page = await db.page.findUnique({
     where: { id },
     include: { content: true, seo: true },
   });
 
   if (!page) {
+    const slugCandidate = id.startsWith('page-') ? id.replace(/^page-/, '') : id;
+    page = await db.page.findUnique({
+      where: { slug: slugCandidate },
+      include: { content: true, seo: true },
+    });
+  }
+
+  if (!page) {
     throw new Error(`Page not found: ${id}`);
   }
 
+  const actualPageId = page.id;
+
   const updated = await db.page.update({
-    where: { id },
+    where: { id: actualPageId },
     data: {
       status: 'PUBLISHED',
       publishedAt: new Date(),
@@ -384,15 +441,15 @@ export async function publishPage(id: string, author: AdminUserSession) {
 
   if (page.content) {
     await db.pageContent.update({
-      where: { pageId: id },
+      where: { pageId: actualPageId },
       data: { isPublished: true },
     });
   }
 
   await db.pageRevision.create({
     data: {
-      pageId: id,
-      contentSnapshot: updated.content ? { blocks: updated.content.blocks } : {},
+      pageId: actualPageId,
+      contentSnapshot: updated.content ? { blocks: updated.content.blocks, customCss: updated.content.customCss } : {},
       seoSnapshot: updated.seo ? { ...updated.seo } : null,
       authorId: author.id,
       reason: 'Published page',
@@ -403,7 +460,7 @@ export async function publishPage(id: string, author: AdminUserSession) {
     userId: author.id,
     action: 'PAGE_PUBLISHED',
     entityType: 'PAGE',
-    entityId: id,
+    entityId: actualPageId,
     metadata: { slug: updated.slug },
   });
 
@@ -420,11 +477,17 @@ export async function publishPage(id: string, author: AdminUserSession) {
 
 export async function unpublishPage(id: string, author: AdminUserSession) {
   const db = getDb();
-  const page = await db.page.findUnique({ where: { id } });
+  let page = await db.page.findUnique({ where: { id } });
+  if (!page) {
+    const slugCandidate = id.startsWith('page-') ? id.replace(/^page-/, '') : id;
+    page = await db.page.findUnique({ where: { slug: slugCandidate } });
+  }
   if (!page) throw new Error(`Page not found: ${id}`);
 
+  const actualPageId = page.id;
+
   const updated = await db.page.update({
-    where: { id },
+    where: { id: actualPageId },
     data: {
       status: 'DRAFT',
     },
@@ -433,7 +496,7 @@ export async function unpublishPage(id: string, author: AdminUserSession) {
 
   if (updated.content) {
     await db.pageContent.update({
-      where: { pageId: id },
+      where: { pageId: actualPageId },
       data: { isPublished: false },
     });
   }
@@ -442,7 +505,7 @@ export async function unpublishPage(id: string, author: AdminUserSession) {
     userId: author.id,
     action: 'PAGE_UNPUBLISHED',
     entityType: 'PAGE',
-    entityId: id,
+    entityId: actualPageId,
     metadata: { slug: updated.slug },
   });
 
@@ -463,7 +526,11 @@ export async function unpublishPage(id: string, author: AdminUserSession) {
  */
 export async function deletePage(id: string, author: AdminUserSession) {
   const db = getDb();
-  const page = await db.page.findUnique({ where: { id } });
+  let page = await db.page.findUnique({ where: { id } });
+  if (!page) {
+    const slugCandidate = id.startsWith('page-') ? id.replace(/^page-/, '') : id;
+    page = await db.page.findUnique({ where: { slug: slugCandidate } });
+  }
   if (!page) {
     throw new Error(`Page not found: ${id}`);
   }
@@ -472,13 +539,14 @@ export async function deletePage(id: string, author: AdminUserSession) {
     throw new Error("Cannot delete the reserved 'home' page.");
   }
 
-  await db.page.delete({ where: { id } });
+  const actualPageId = page.id;
+  await db.page.delete({ where: { id: actualPageId } });
 
   await createAuditLog({
     userId: author.id,
     action: 'PAGE_DELETED',
     entityType: 'PAGE',
-    entityId: id,
+    entityId: actualPageId,
     metadata: { slug: page.slug, name: page.name },
   });
 
@@ -489,23 +557,43 @@ export async function deletePage(id: string, author: AdminUserSession) {
     // Safe no-op
   }
 
-  return { success: true, id, slug: page.slug };
+  return { success: true, id: actualPageId, slug: page.slug };
 }
 
 export async function getPageRevisions(pageId: string) {
   const db = getDb();
+  let actualId = pageId;
+  const page = await db.page.findUnique({ where: { id: pageId } });
+  if (!page) {
+    const slugCandidate = pageId.startsWith('page-') ? pageId.replace(/^page-/, '') : pageId;
+    const pageBySlug = await db.page.findUnique({ where: { slug: slugCandidate } });
+    if (pageBySlug) {
+      actualId = pageBySlug.id;
+    }
+  }
+
   return db.pageRevision.findMany({
-    where: { pageId },
+    where: { pageId: actualId },
     orderBy: { createdAt: 'desc' },
   });
 }
 
 export async function getPageRevisionById(pageId: string, revisionId: string) {
   const db = getDb();
+  let actualId = pageId;
+  const page = await db.page.findUnique({ where: { id: pageId } });
+  if (!page) {
+    const slugCandidate = pageId.startsWith('page-') ? pageId.replace(/^page-/, '') : pageId;
+    const pageBySlug = await db.page.findUnique({ where: { slug: slugCandidate } });
+    if (pageBySlug) {
+      actualId = pageBySlug.id;
+    }
+  }
+
   const revision = await db.pageRevision.findUnique({
     where: { id: revisionId },
   });
-  if (!revision || revision.pageId !== pageId) {
+  if (!revision || (revision.pageId !== actualId && revision.pageId !== pageId)) {
     return null;
   }
   return revision;
@@ -517,13 +605,21 @@ export async function restorePageRevision(
   author: AdminUserSession
 ) {
   const db = getDb();
-  const page = await db.page.findUnique({
+  let page = await db.page.findUnique({
     where: { id: pageId },
     include: { content: true, seo: true },
   });
+  if (!page) {
+    const slugCandidate = pageId.startsWith('page-') ? pageId.replace(/^page-/, '') : pageId;
+    page = await db.page.findUnique({
+      where: { slug: slugCandidate },
+      include: { content: true, seo: true },
+    });
+  }
   if (!page) throw new Error(`Page not found: ${pageId}`);
 
-  const revision = await getPageRevisionById(pageId, revisionId);
+  const actualPageId = page.id;
+  const revision = await getPageRevisionById(actualPageId, revisionId);
   if (!revision) throw new Error(`Revision ${revisionId} not found for page ${pageId}`);
 
   // Restore content snapshot
@@ -532,7 +628,7 @@ export async function restorePageRevision(
   const customCss = contentSnapshot.customCss || null;
 
   await db.pageContent.update({
-    where: { pageId },
+    where: { pageId: actualPageId },
     data: {
       blocks: blocks as any,
       customCss,
@@ -544,7 +640,7 @@ export async function restorePageRevision(
   if (revision.seoSnapshot) {
     const seoSnapshot = revision.seoSnapshot as Record<string, any>;
     await db.pageSeo.update({
-      where: { pageId },
+      where: { pageId: actualPageId },
       data: {
         seoTitle: seoSnapshot.seoTitle ?? null,
         metaDescription: seoSnapshot.metaDescription ?? null,
@@ -567,7 +663,7 @@ export async function restorePageRevision(
   // Create a brand new revision snapshot recording the restoration
   const newRevision = await db.pageRevision.create({
     data: {
-      pageId,
+      pageId: actualPageId,
       contentSnapshot: { blocks, customCss },
       seoSnapshot: revision.seoSnapshot,
       authorId: author.id,
@@ -579,7 +675,7 @@ export async function restorePageRevision(
     userId: author.id,
     action: 'PAGE_REVISION_RESTORED',
     entityType: 'PAGE',
-    entityId: pageId,
+    entityId: actualPageId,
     metadata: {
       restoredRevisionId: revisionId,
       newRevisionId: newRevision.id,
@@ -587,7 +683,7 @@ export async function restorePageRevision(
     },
   });
 
-  return getPageById(pageId);
+  return getPageById(actualPageId);
 }
 
 export async function previewDraftPage(id: string, author: AdminUserSession) {

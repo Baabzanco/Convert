@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Pencil, ArrowUp, ArrowDown, Copy, Trash2 } from 'lucide-react';
+import { Pencil, ArrowUp, ArrowDown, Copy, CopyPlus, ClipboardPaste, Trash2 } from 'lucide-react';
 
 interface InlineBlockWrapperProps {
   blockId: string;
@@ -12,6 +12,10 @@ interface InlineBlockWrapperProps {
   onSelect: () => void;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  onCopy?: () => void;
+  onPasteAfter?: () => void;
+  canPaste?: boolean;
+  copiedBlockLabel?: string;
   onDuplicate?: () => void;
   onDelete?: () => void;
   children: React.ReactNode;
@@ -26,6 +30,10 @@ export function InlineBlockWrapper({
   onSelect,
   onMoveUp,
   onMoveDown,
+  onCopy,
+  onPasteAfter,
+  canPaste = false,
+  copiedBlockLabel,
   onDuplicate,
   onDelete,
   children,
@@ -40,6 +48,10 @@ export function InlineBlockWrapper({
       onSelect();
     }
   };
+
+  const hasAnyActions = Boolean(
+    onMoveUp || onMoveDown || onCopy || onPasteAfter || onDuplicate || onDelete
+  );
 
   return (
     <div
@@ -63,7 +75,7 @@ export function InlineBlockWrapper({
       {/* Floating Header Controls */}
       <div className="absolute -top-3.5 right-4 z-20 flex items-center gap-1.5 transition-all">
         {/* Quick Contextual Actions (Visible on hover/selected) */}
-        {(onMoveUp || onMoveDown || onDuplicate || onDelete) && (
+        {hasAnyActions && (
           <div
             className={`flex items-center gap-1 bg-white border border-[#E4E2F0] rounded-full px-2 py-0.5 shadow-md ${
               isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
@@ -79,6 +91,7 @@ export function InlineBlockWrapper({
                 }}
                 className="p-1 hover:text-[#7C3AED] text-slate-500 rounded"
                 title="Move Section Up"
+                aria-label="Move Section Up"
               >
                 <ArrowUp className="w-3 h-3" />
               </button>
@@ -92,8 +105,46 @@ export function InlineBlockWrapper({
                 }}
                 className="p-1 hover:text-[#7C3AED] text-slate-500 rounded"
                 title="Move Section Down"
+                aria-label="Move Section Down"
               >
                 <ArrowDown className="w-3 h-3" />
+              </button>
+            )}
+            {onCopy && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCopy();
+                }}
+                className="p-1 hover:text-[#7C3AED] text-slate-500 rounded"
+                title={`Copy ${label} Block`}
+                aria-label={`Copy ${label} Block`}
+              >
+                <Copy className="w-3 h-3" />
+              </button>
+            )}
+            {onPasteAfter && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPasteAfter();
+                }}
+                disabled={!canPaste}
+                className={`p-1 rounded ${
+                  canPaste
+                    ? 'hover:text-[#7C3AED] text-amber-600'
+                    : 'text-slate-300 cursor-not-allowed'
+                }`}
+                title={
+                  canPaste
+                    ? `Paste ${copiedBlockLabel ? `"${copiedBlockLabel}"` : 'Copied Block'} After This Section`
+                    : 'Paste After (Clipboard is empty)'
+                }
+                aria-label="Paste Copied Block After This Section"
+              >
+                <ClipboardPaste className="w-3 h-3" />
               </button>
             )}
             {onDuplicate && (
@@ -104,9 +155,10 @@ export function InlineBlockWrapper({
                   onDuplicate();
                 }}
                 className="p-1 hover:text-[#7C3AED] text-slate-500 rounded"
-                title="Duplicate Section"
+                title="Duplicate Section on This Page"
+                aria-label="Duplicate Section"
               >
-                <Copy className="w-3 h-3" />
+                <CopyPlus className="w-3 h-3" />
               </button>
             )}
             {onDelete && (
@@ -118,6 +170,7 @@ export function InlineBlockWrapper({
                 }}
                 className="p-1 hover:text-red-600 text-slate-500 rounded"
                 title="Delete Section"
+                aria-label="Delete Section"
               >
                 <Trash2 className="w-3 h-3" />
               </button>

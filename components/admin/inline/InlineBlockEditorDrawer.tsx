@@ -23,11 +23,41 @@ import {
   Layers,
   ArrowUp,
   ArrowDown,
+  ArrowLeft,
   FolderOpen,
+  Copy,
+  Code,
+  Eye,
+  EyeOff,
+  Palette,
+  Pencil,
 } from 'lucide-react';
-import { UniversalContentBlock } from '@/lib/cms/blocks';
+import { UniversalContentBlock, duplicateBlock, getBlockLabel } from '@/lib/cms/blocks';
+import {
+  DEFAULT_CONTAINER_SETTINGS,
+  sanitizeContainerSettings,
+  getContainerWrapperClasses,
+  getContainerInnerClasses,
+  isSupportedContainerChildType,
+  MAX_CONTAINER_DEPTH,
+  type ContainerBlockSettings,
+  type ContainerInnerWidth,
+  type ContainerLayout,
+  type ContainerGridCols,
+  type ContainerGap,
+  type ContainerAlign,
+  type ContainerPadding,
+  type ContainerBackground,
+  type ContainerBorderRadius,
+  type ContainerBorder,
+} from '@/lib/cms/container-contract';
 import { getAllTools } from '@/lib/tools';
-import { isSafeUrl } from '@/lib/admin/validation';
+import {
+  isSafeUrl,
+  sanitizeCustomHtml,
+  scopeAndSanitizeCss,
+  extractStylesFromHtml,
+} from '@/lib/admin/validation';
 import MediaPickerModal from '@/components/admin/media/MediaPickerModal';
 import { MediaAssetItem } from '@/lib/admin/types';
 
@@ -36,6 +66,9 @@ interface InlineBlockEditorDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveBlock: (updatedBlock: UniversalContentBlock) => void;
+  onCopyBlock?: (block: UniversalContentBlock) => void;
+  onSelectBlock?: (blockId: string) => void;
+  parentBlock?: UniversalContentBlock | null;
 }
 
 export function InlineBlockEditorDrawer({
@@ -43,16 +76,28 @@ export function InlineBlockEditorDrawer({
   isOpen,
   onClose,
   onSaveBlock,
+  onCopyBlock,
+  onSelectBlock,
+  parentBlock,
 }: InlineBlockEditorDrawerProps) {
   const [content, setContent] = useState<Record<string, any>>({});
+  const [containerSettings, setContainerSettings] = useState<ContainerBlockSettings>(DEFAULT_CONTAINER_SETTINGS);
+  const [containerActiveTab, setContainerActiveTab] = useState<'settings' | 'children' | 'preview'>('settings');
   const [isMediaPickerOpen, setIsMediaPickerOpen] = useState(false);
+  const [htmlViewMode, setHtmlViewMode] = useState<'source' | 'css' | 'preview'>('source');
   const [validationError, setValidationError] = useState<string | null>(null);
   const allCanonicalTools = getAllTools();
 
   useEffect(() => {
     if (block) {
       setContent(JSON.parse(JSON.stringify(block.content || {})));
+      if (block.type === 'container') {
+        const rawSettings = block.settings || block.content?.settings || {};
+        setContainerSettings(sanitizeContainerSettings(rawSettings));
+        setContainerActiveTab('settings');
+      }
       setValidationError(null);
+      setHtmlViewMode('source');
     }
   }, [block]);
 
@@ -70,6 +115,10 @@ export function InlineBlockEditorDrawer({
       setValidationError('Button URL contains an unsafe protocol.');
       return;
     }
+    if (content.secondaryHref && !isSafeUrl(content.secondaryHref)) {
+      setValidationError('Secondary button URL contains an unsafe protocol.');
+      return;
+    }
     if (content.exploreHref && !isSafeUrl(content.exploreHref)) {
       setValidationError('Explore URL contains an unsafe protocol.');
       return;
@@ -80,6 +129,40 @@ export function InlineBlockEditorDrawer({
     }
     if (content.pdfHubHref && !isSafeUrl(content.pdfHubHref)) {
       setValidationError('PDF Hub URL contains an unsafe protocol.');
+      return;
+    }
+    if (content.src && !isSafeUrl(content.src)) {
+      setValidationError('Image source URL contains an unsafe protocol.');
+      return;
+    }
+    if (block.type === 'custom_html') {
+      const htmlStr = content.html || '';
+      if (typeof htmlStr === 'string' && htmlStr.length > 200000) {
+        setValidationError('Custom HTML content exceeds the 200KB limit.');
+        return;
+      }
+      const cssStr = content.css || '';
+      if (typeof cssStr === 'string' && cssStr.length > 50000) {
+        setValidationError('Custom CSS content exceeds the 50KB limit.');
+        return;
+      }
+    }
+
+    if (block.type === 'container') {
+      const sanitizedSettings = sanitizeContainerSettings(containerSettings);
+      const childBlocks = Array.isArray(content.blocks) ? content.blocks : [];
+      onSaveBlock({
+        ...block,
+        settings: sanitizedSettings,
+        content: {
+          ...content,
+          settings: sanitizedSettings,
+          blocks: childBlocks,
+        },
+        blocks: childBlocks,
+        children: childBlocks,
+      });
+      onClose();
       return;
     }
 
@@ -103,8 +186,272 @@ export function InlineBlockEditorDrawer({
     setIsMediaPickerOpen(false);
   };
 
+  const handleAddChildBlock = (type: string) => {
+    const currentDepth = parentBlock ? 2 : 1;
+    const check = isSupportedContainerChildType(type, currentDepth);
+    if (!check.supported) {
+      setValidationError(check.reason || `Type "${type}" is not supported inside a container.`);
+      return;
+    }
+    setValidationError(null);
+
+    const newChildId = `blk-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const currentChildren = Array.isArray(content.blocks) ? [...content.blocks] : [];
+    let childBlock: any;
+
+    switch (type) {
+      case 'heading':
+        childBlock = {
+          id: newChildId,
+          type: 'heading',
+          order: currentChildren.length + 1,
+          enabled: true,
+          content: { level: 3, text: 'Child Heading' },
+          text: 'Child Heading',
+          level: 3,
+        };
+        break;
+      case 'paragraph':
+        childBlock = {
+          id: newChildId,
+          type: 'paragraph',
+          order: currentChildren.length + 1,
+          enabled: true,
+          content: { text: 'Child paragraph content goes here.' },
+          text: 'Child paragraph content goes here.',
+        };
+        break;
+      case 'cta':
+        childBlock = {
+          id: newChildId,
+          type: 'cta',
+          order: currentChildren.length + 1,
+          enabled: true,
+          content: {
+            title: 'Call to Action',
+            description: 'Action description',
+            buttonText: 'Click Here',
+            label: 'Click Here',
+            href: '#',
+            variant: 'primary',
+          },
+          buttonText: 'Click Here',
+          label: 'Click Here',
+          href: '#',
+          variant: 'primary',
+        };
+        break;
+      case 'feature':
+        childBlock = {
+          id: newChildId,
+          type: 'feature',
+          order: currentChildren.length + 1,
+          enabled: true,
+          content: { title: 'Feature Item', description: 'Feature description' },
+          title: 'Feature Item',
+          description: 'Feature description',
+        };
+        break;
+      case 'faq':
+        childBlock = {
+          id: newChildId,
+          type: 'faq',
+          order: currentChildren.length + 1,
+          enabled: true,
+          content: { question: 'Question?', answer: 'Answer here.' },
+          question: 'Question?',
+          answer: 'Answer here.',
+        };
+        break;
+      case 'image':
+        childBlock = {
+          id: newChildId,
+          type: 'image',
+          order: currentChildren.length + 1,
+          enabled: true,
+          content: { src: '/images/og-image.png', alt: 'Child Image', caption: '' },
+          src: '/images/og-image.png',
+          alt: 'Child Image',
+        };
+        break;
+      case 'link':
+        childBlock = {
+          id: newChildId,
+          type: 'link',
+          order: currentChildren.length + 1,
+          enabled: true,
+          content: { text: 'Learn More', href: '#', isExternal: false },
+          text: 'Learn More',
+          href: '#',
+        };
+        break;
+      case 'rich_text':
+        childBlock = {
+          id: newChildId,
+          type: 'rich_text',
+          order: currentChildren.length + 1,
+          enabled: true,
+          content: { html: '<p>Rich text child content.</p>' },
+          html: '<p>Rich text child content.</p>',
+        };
+        break;
+      case 'custom_html':
+        childBlock = {
+          id: newChildId,
+          type: 'custom_html',
+          order: currentChildren.length + 1,
+          enabled: true,
+          content: { html: '<div>Custom child HTML</div>', css: '' },
+          html: '<div>Custom child HTML</div>',
+        };
+        break;
+      case 'container':
+        childBlock = {
+          id: newChildId,
+          type: 'container',
+          order: currentChildren.length + 1,
+          enabled: true,
+          settings: { ...DEFAULT_CONTAINER_SETTINGS },
+          content: { settings: { ...DEFAULT_CONTAINER_SETTINGS }, blocks: [] },
+          blocks: [],
+          children: [],
+        };
+        break;
+      default:
+        childBlock = {
+          id: newChildId,
+          type: 'paragraph',
+          order: currentChildren.length + 1,
+          enabled: true,
+          content: { text: 'New child item' },
+        };
+    }
+
+    setContent({
+      ...content,
+      blocks: [...currentChildren, childBlock],
+    });
+  };
+
+  const handleMoveChildBlock = (index: number, direction: 'up' | 'down') => {
+    const currentChildren = Array.isArray(content.blocks) ? [...content.blocks] : [];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= currentChildren.length) return;
+    const temp = currentChildren[index];
+    currentChildren[index] = currentChildren[targetIndex];
+    currentChildren[targetIndex] = temp;
+    setContent({
+      ...content,
+      blocks: currentChildren.map((b, i) => ({ ...b, order: i + 1 })),
+    });
+  };
+
+  const handleDuplicateChildBlock = (index: number) => {
+    const currentChildren = Array.isArray(content.blocks) ? [...content.blocks] : [];
+    if (!currentChildren[index]) return;
+    const duplicated = duplicateBlock(currentChildren[index]);
+    currentChildren.splice(index + 1, 0, duplicated);
+    setContent({
+      ...content,
+      blocks: currentChildren.map((b, i) => ({ ...b, order: i + 1 })),
+    });
+  };
+
+  const handleDeleteChildBlock = (index: number) => {
+    const currentChildren = Array.isArray(content.blocks) ? [...content.blocks] : [];
+    currentChildren.splice(index, 1);
+    setContent({
+      ...content,
+      blocks: currentChildren.map((b, i) => ({ ...b, order: i + 1 })),
+    });
+  };
+
+  const handleEditChildBlock = (childId: string) => {
+    if (!onSelectBlock) return;
+    if (block.type === 'container') {
+      const sanitizedSettings = sanitizeContainerSettings(containerSettings);
+      const childBlocks = Array.isArray(content.blocks) ? content.blocks : [];
+      onSaveBlock({
+        ...block,
+        settings: sanitizedSettings,
+        content: {
+          ...content,
+          settings: sanitizedSettings,
+          blocks: childBlocks,
+        },
+        blocks: childBlocks,
+        children: childBlocks,
+      });
+    }
+    onSelectBlock(childId);
+  };
+
+  const handleBackToParent = () => {
+    if (!parentBlock || !onSelectBlock) return;
+
+    if (content.href && !isSafeUrl(content.href)) {
+      setValidationError('Destination URL contains an unsafe protocol (javascript:, vbscript:, etc.).');
+      return;
+    }
+    if (content.buttonHref && !isSafeUrl(content.buttonHref)) {
+      setValidationError('Button URL contains an unsafe protocol.');
+      return;
+    }
+    if (content.secondaryHref && !isSafeUrl(content.secondaryHref)) {
+      setValidationError('Secondary button URL contains an unsafe protocol.');
+      return;
+    }
+    if (content.src && !isSafeUrl(content.src)) {
+      setValidationError('Image source URL contains an unsafe protocol.');
+      return;
+    }
+    if (block.type === 'custom_html') {
+      const htmlStr = content.html || '';
+      if (typeof htmlStr === 'string' && htmlStr.length > 200000) {
+        setValidationError('Custom HTML content exceeds the 200KB limit.');
+        return;
+      }
+      const cssStr = content.css || '';
+      if (typeof cssStr === 'string' && cssStr.length > 50000) {
+        setValidationError('Custom CSS content exceeds the 50KB limit.');
+        return;
+      }
+    }
+
+    setValidationError(null);
+
+    if (block.type === 'container') {
+      const sanitizedSettings = sanitizeContainerSettings(containerSettings);
+      const childBlocks = Array.isArray(content.blocks) ? content.blocks : [];
+      onSaveBlock({
+        ...block,
+        settings: sanitizedSettings,
+        content: {
+          ...content,
+          settings: sanitizedSettings,
+          blocks: childBlocks,
+        },
+        blocks: childBlocks,
+        children: childBlocks,
+      });
+    } else {
+      onSaveBlock({
+        ...block,
+        content,
+        // sync root properties for backward-compatibility
+        ...content,
+      });
+    }
+
+    onSelectBlock(parentBlock.id);
+  };
+
   const getBlockIcon = () => {
     switch (block.type) {
+      case 'container':
+        return <Layers className="w-5 h-5 text-[#7C3AED]" />;
+      case 'custom_html':
+        return <Code className="w-5 h-5 text-[#7C3AED]" />;
       case 'hero':
         return <Sparkles className="w-5 h-5 text-[#7C3AED]" />;
       case 'intro':
@@ -138,6 +485,7 @@ export function InlineBlockEditorDrawer({
         return <DollarSign className="w-5 h-5 text-[#7C3AED]" />;
       case 'hubs':
       case 'popular_tools':
+      case 'spacer':
         return <Layers className="w-5 h-5 text-[#7C3AED]" />;
       default:
         return <FileText className="w-5 h-5 text-[#7C3AED]" />;
@@ -146,6 +494,10 @@ export function InlineBlockEditorDrawer({
 
   const getBlockTitle = () => {
     switch (block.type) {
+      case 'container':
+        return 'Edit Container Block';
+      case 'custom_html':
+        return 'Edit Custom HTML Block';
       case 'hero':
         return 'Edit Hero & Heading';
       case 'popular_tools':
@@ -167,6 +519,10 @@ export function InlineBlockEditorDrawer({
         return 'Edit Supported Formats';
       case 'technical_details':
         return 'Edit Technical Details & Specs';
+      case 'benefits_trust':
+        return 'Edit Trust & Benefits Badges';
+      case 'spacer':
+        return 'Edit Vertical Spacer';
       case 'privacy_note':
         return 'Edit Privacy & Guarantee';
       case 'use_cases':
@@ -176,7 +532,7 @@ export function InlineBlockEditorDrawer({
       case 'related_tools':
         return 'Edit Related Tools';
       case 'cta':
-        return 'Edit Call to Action Button';
+        return 'Edit Call to Action';
       case 'image':
         return 'Edit Image & Media';
       case 'link':
@@ -218,15 +574,48 @@ export function InlineBlockEditorDrawer({
                     <p className="text-xs text-[#5E6488]">Type: {block.type} • ID: {block.id}</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="p-2 rounded-xl text-[#5E6488] hover:text-[#0F112E] hover:bg-slate-100 transition-colors"
-                  aria-label="Close editor"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-1.5">
+                  {onCopyBlock && (
+                    <button
+                      type="button"
+                      onClick={() => onCopyBlock({ ...block, content, ...content })}
+                      className="p-2 rounded-xl text-[#5E6488] hover:text-[#7C3AED] hover:bg-[#F4F0FD] transition-colors"
+                      title="Copy Block to Clipboard"
+                      aria-label="Copy Block"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="p-2 rounded-xl text-[#5E6488] hover:text-[#0F112E] hover:bg-slate-100 transition-colors"
+                    aria-label="Close editor"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
+
+              {parentBlock && onSelectBlock && (
+                <div className="px-5 py-2.5 bg-indigo-50/80 border-b border-indigo-100/90 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5 text-slate-600 min-w-0 pr-2">
+                    <span className="font-bold text-indigo-700 shrink-0">Parent Container:</span>
+                    <span className="font-semibold text-slate-800 truncate">
+                      {parentBlock.content?.title || parentBlock.title || getBlockLabel(parentBlock.type)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleBackToParent}
+                    className="inline-flex items-center gap-1.5 font-bold text-[#7C3AED] hover:text-[#6D28D9] bg-white hover:bg-white/80 px-2.5 py-1 rounded-lg border border-[#E4E2F0] shadow-2xs transition-colors shrink-0"
+                    title="Save changes and return to parent container"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Back to Container</span>
+                  </button>
+                </div>
+              )}
 
               {validationError && (
                 <div className="p-3 bg-red-50 border-b border-red-200 text-xs font-semibold text-red-700">
@@ -530,8 +919,8 @@ export function InlineBlockEditorDrawer({
                           </label>
                           <input
                             type="text"
-                            value={content.subheading || ''}
-                            onChange={(e) => setContent({ ...content, subheading: e.target.value })}
+                            value={content.subheading || content.description || ''}
+                            onChange={(e) => setContent({ ...content, subheading: e.target.value, description: e.target.value })}
                             className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
                           />
                         </div>
@@ -844,6 +1233,18 @@ export function InlineBlockEditorDrawer({
                     {/* Check if it's a multi-item FAQ or single item */}
                     {content.items !== undefined ? (
                       <div>
+                        <div className="mb-4">
+                          <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                            FAQ Section Heading
+                          </label>
+                          <input
+                            type="text"
+                            value={content.heading || ''}
+                            onChange={(e) => setContent({ ...content, heading: e.target.value })}
+                            placeholder="e.g. Frequently Asked Questions"
+                            className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
+                          />
+                        </div>
                         <div className="flex items-center justify-between mb-2">
                           <label className="text-xs font-bold uppercase tracking-wider text-[#5E6488]">
                             FAQ Question & Answer Pairs ({content.items?.length || 0})
@@ -1034,47 +1435,102 @@ export function InlineBlockEditorDrawer({
                   </div>
                 )}
 
-                {/* 8. CTA BUTTON */}
+                {/* 8. CTA CALL TO ACTION */}
                 {block.type === 'cta' && (
                   <div className="space-y-4">
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
-                        Button Label
+                        Card Title / Headline (Optional)
                       </label>
                       <input
                         type="text"
-                        value={content.label || content.buttonText || ''}
-                        onChange={(e) =>
-                          setContent({ ...content, label: e.target.value, buttonText: e.target.value })
-                        }
+                        value={content.title || ''}
+                        onChange={(e) => setContent({ ...content, title: e.target.value })}
+                        placeholder="e.g. Need more file processing?"
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
-                        Button Link URL
+                        Card Description / Subtitle (Optional)
                       </label>
-                      <input
-                        type="text"
-                        value={content.href || ''}
-                        onChange={(e) => setContent({ ...content, href: e.target.value })}
-                        placeholder="/tools/compress-image or #section"
+                      <textarea
+                        rows={2}
+                        value={content.description || ''}
+                        onChange={(e) => setContent({ ...content, description: e.target.value })}
+                        placeholder="e.g. Convert24 offers dozens of free, fast, private online conversion and PDF tools."
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
                       />
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
-                        Style Variant
-                      </label>
-                      <select
-                        value={content.variant || 'primary'}
-                        onChange={(e) => setContent({ ...content, variant: e.target.value })}
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
-                      >
-                        <option value="primary">Primary (Gradient Purple)</option>
-                        <option value="secondary">Secondary (Dark)</option>
-                        <option value="outline">Outline</option>
-                      </select>
+                    <div className="p-3.5 bg-[#FAF9FF] border border-[#E4E2F0] rounded-xl space-y-3">
+                      <h4 className="text-xs font-bold text-[#7C3AED] uppercase">Primary Action Button</h4>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                          Button Label
+                        </label>
+                        <input
+                          type="text"
+                          value={content.label || content.buttonText || ''}
+                          onChange={(e) =>
+                            setContent({ ...content, label: e.target.value, buttonText: e.target.value })
+                          }
+                          placeholder="e.g. Explore All Tools"
+                          className="w-full px-3 py-2 bg-white rounded-lg border border-[#E4E2F0] text-sm text-[#0F112E]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                          Button Link URL
+                        </label>
+                        <input
+                          type="text"
+                          value={content.href || ''}
+                          onChange={(e) => setContent({ ...content, href: e.target.value })}
+                          placeholder="/tools or #section"
+                          className="w-full px-3 py-2 bg-white rounded-lg border border-[#E4E2F0] text-sm text-[#0F112E]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                          Button Style Variant
+                        </label>
+                        <select
+                          value={content.variant || 'primary'}
+                          onChange={(e) => setContent({ ...content, variant: e.target.value })}
+                          className="w-full px-3 py-2 bg-white rounded-lg border border-[#E4E2F0] text-sm text-[#0F112E]"
+                        >
+                          <option value="primary">Primary (Gradient Purple)</option>
+                          <option value="secondary">Secondary (Dark)</option>
+                          <option value="outline">Outline</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="p-3.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl space-y-3">
+                      <h4 className="text-xs font-bold text-slate-700 uppercase">Secondary Action Button (Optional)</h4>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                          Secondary Button Label
+                        </label>
+                        <input
+                          type="text"
+                          value={content.secondaryLabel || ''}
+                          onChange={(e) => setContent({ ...content, secondaryLabel: e.target.value })}
+                          placeholder="e.g. Learn More"
+                          className="w-full px-3 py-2 bg-white rounded-lg border border-[#E2E8F0] text-sm text-[#0F112E]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                          Secondary Button URL
+                        </label>
+                        <input
+                          type="text"
+                          value={content.secondaryHref || ''}
+                          onChange={(e) => setContent({ ...content, secondaryHref: e.target.value })}
+                          placeholder="/about or https://example.com"
+                          className="w-full px-3 py-2 bg-white rounded-lg border border-[#E2E8F0] text-sm text-[#0F112E]"
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1215,24 +1671,38 @@ export function InlineBlockEditorDrawer({
                   <div className="space-y-4">
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
-                        Section Heading
+                        Section Heading / Title
                       </label>
                       <input
                         type="text"
-                        value={content.heading || ''}
-                        onChange={(e) => setContent({ ...content, heading: e.target.value })}
+                        value={content.heading || content.title || ''}
+                        onChange={(e) => setContent({ ...content, heading: e.target.value, title: e.target.value })}
+                        placeholder="Page Introduction"
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
-                        Introduction Text
+                        Introduction Text (Plain Text)
                       </label>
                       <textarea
-                        rows={6}
-                        value={content.text || ''}
-                        onChange={(e) => setContent({ ...content, text: e.target.value })}
+                        rows={4}
+                        value={content.text || content.description || ''}
+                        onChange={(e) => setContent({ ...content, text: e.target.value, description: e.target.value })}
+                        placeholder="Descriptive overview of the tool or topic..."
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                        Custom HTML (Optional - overrides plain text)
+                      </label>
+                      <textarea
+                        rows={4}
+                        value={content.html || ''}
+                        onChange={(e) => setContent({ ...content, html: e.target.value })}
+                        placeholder="<p>Formatted HTML content...</p>"
+                        className="w-full font-mono text-xs px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-[#0F112E]"
                       />
                     </div>
                   </div>
@@ -1579,6 +2049,1138 @@ export function InlineBlockEditorDrawer({
                         })}
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* 19. SUPPORTED FORMATS */}
+                {block.type === 'supported_formats' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                        Section Heading
+                      </label>
+                      <input
+                        type="text"
+                        value={content.heading || ''}
+                        onChange={(e) => setContent({ ...content, heading: e.target.value })}
+                        placeholder="Supported File Formats"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                        Description
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={content.description || ''}
+                        onChange={(e) => setContent({ ...content, description: e.target.value })}
+                        placeholder="Convert between multiple formats safely..."
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
+                      />
+                    </div>
+                    {/* Input Formats */}
+                    <div className="p-3 bg-[#FAF9FF] border border-[#E4E2F0] rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold uppercase tracking-wider text-[#7C3AED]">
+                          Input Formats ({content.inputFormats?.length || 0})
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const list = content.inputFormats || [];
+                            setContent({ ...content, inputFormats: [...list, 'ext'] });
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-[#7C3AED] hover:underline"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Format
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(content.inputFormats || []).map((fmt: string, idx: number) => (
+                          <div key={idx} className="flex items-center bg-white border border-[#E4E2F0] rounded-lg px-2 py-1 gap-1.5">
+                            <input
+                              type="text"
+                              value={fmt}
+                              onChange={(e) => {
+                                const updated = [...(content.inputFormats || [])];
+                                updated[idx] = e.target.value.replace(/^\./, '').trim();
+                                setContent({ ...content, inputFormats: updated });
+                              }}
+                              className="w-16 text-xs font-bold uppercase text-[#0F112E] bg-transparent outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = content.inputFormats.filter((_: any, i: number) => i !== idx);
+                                setContent({ ...content, inputFormats: updated });
+                              }}
+                              className="text-red-400 hover:text-red-600"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Output Formats */}
+                    <div className="p-3 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold uppercase tracking-wider text-emerald-800">
+                          Output Formats ({content.outputFormats?.length || 0})
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const list = content.outputFormats || [];
+                            setContent({ ...content, outputFormats: [...list, 'ext'] });
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:underline"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Format
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(content.outputFormats || []).map((fmt: string, idx: number) => (
+                          <div key={idx} className="flex items-center bg-white border border-emerald-200 rounded-lg px-2 py-1 gap-1.5">
+                            <input
+                              type="text"
+                              value={fmt}
+                              onChange={(e) => {
+                                const updated = [...(content.outputFormats || [])];
+                                updated[idx] = e.target.value.replace(/^\./, '').trim();
+                                setContent({ ...content, outputFormats: updated });
+                              }}
+                              className="w-16 text-xs font-bold uppercase text-emerald-900 bg-transparent outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = content.outputFormats.filter((_: any, i: number) => i !== idx);
+                                setContent({ ...content, outputFormats: updated });
+                              }}
+                              className="text-red-400 hover:text-red-600"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                        Additional Format Notes (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={content.notes || ''}
+                        onChange={(e) => setContent({ ...content, notes: e.target.value })}
+                        placeholder="e.g. Max upload size 100MB per file"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* 20. TECHNICAL DETAILS */}
+                {block.type === 'technical_details' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                        Section Heading
+                      </label>
+                      <input
+                        type="text"
+                        value={content.heading || ''}
+                        onChange={(e) => setContent({ ...content, heading: e.target.value })}
+                        placeholder="Technical Details & Limitations"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                        Description
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={content.description || ''}
+                        onChange={(e) => setContent({ ...content, description: e.target.value })}
+                        placeholder="Architecture specifications and processing limits..."
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
+                      />
+                    </div>
+                    {/* Specs List */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-[#5E6488]">
+                          Specifications ({content.specs?.length || 0})
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const specs = content.specs || [];
+                            setContent({
+                              ...content,
+                              specs: [...specs, { label: 'Spec Name', value: 'Value', notes: '' }],
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-[#7C3AED] hover:underline"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Spec
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        {(content.specs || []).map((spec: any, idx: number) => (
+                          <div key={idx} className="p-3 bg-[#FAF9FF] border border-[#E4E2F0] rounded-xl space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-[#7C3AED]">Spec #{idx + 1}</span>
+                              <div className="flex items-center gap-1">
+                                {idx > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const specs = [...content.specs];
+                                      const temp = specs[idx - 1];
+                                      specs[idx - 1] = specs[idx];
+                                      specs[idx] = temp;
+                                      setContent({ ...content, specs });
+                                    }}
+                                    className="p-1 text-slate-500 hover:text-slate-800"
+                                    title="Move Up"
+                                  >
+                                    <ArrowUp className="w-3 h-3" />
+                                  </button>
+                                )}
+                                {idx < (content.specs || []).length - 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const specs = [...content.specs];
+                                      const temp = specs[idx + 1];
+                                      specs[idx + 1] = specs[idx];
+                                      specs[idx] = temp;
+                                      setContent({ ...content, specs });
+                                    }}
+                                    className="p-1 text-slate-500 hover:text-slate-800"
+                                    title="Move Down"
+                                  >
+                                    <ArrowDown className="w-3 h-3" />
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const specs = content.specs.filter((_: any, i: number) => i !== idx);
+                                    setContent({ ...content, specs });
+                                  }}
+                                  className="p-1 text-red-500 hover:text-red-700"
+                                  title="Delete Spec"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                type="text"
+                                placeholder="Label (e.g. Engine)"
+                                value={spec.label || ''}
+                                onChange={(e) => {
+                                  const specs = [...content.specs];
+                                  specs[idx] = { ...specs[idx], label: e.target.value };
+                                  setContent({ ...content, specs });
+                                }}
+                                className="px-2.5 py-1.5 bg-white border border-[#E4E2F0] rounded text-xs font-medium"
+                              />
+                              <input
+                                type="text"
+                                placeholder="Value (e.g. WebAssembly)"
+                                value={spec.value || ''}
+                                onChange={(e) => {
+                                  const specs = [...content.specs];
+                                  specs[idx] = { ...specs[idx], value: e.target.value };
+                                  setContent({ ...content, specs });
+                                }}
+                                className="px-2.5 py-1.5 bg-white border border-[#E4E2F0] rounded text-xs"
+                              />
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Notes (optional)"
+                              value={spec.notes || ''}
+                              onChange={(e) => {
+                                const specs = [...content.specs];
+                                specs[idx] = { ...specs[idx], notes: e.target.value };
+                                setContent({ ...content, specs });
+                              }}
+                              className="w-full px-2.5 py-1.5 bg-white border border-[#E4E2F0] rounded text-xs"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    {/* Limitations List */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-[#5E6488]">
+                          Limitations / Notes ({content.limitations?.length || 0})
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const list = content.limitations || [];
+                            setContent({ ...content, limitations: [...list, 'New technical limitation or note'] });
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-[#7C3AED] hover:underline"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Limitation
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        {(content.limitations || []).map((lim: string, idx: number) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={lim}
+                              onChange={(e) => {
+                                const list = [...(content.limitations || [])];
+                                list[idx] = e.target.value;
+                                setContent({ ...content, limitations: list });
+                              }}
+                              className="flex-1 px-3 py-1.5 bg-[#FAF9FF] border border-[#E4E2F0] rounded-lg text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const list = content.limitations.filter((_: any, i: number) => i !== idx);
+                                setContent({ ...content, limitations: list });
+                              }}
+                              className="p-1 text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 21. BENEFITS & TRUST */}
+                {block.type === 'benefits_trust' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-[#5E6488]">
+                        Trust & Benefit Badges ({content.items?.length || 0})
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const items = content.items || [];
+                          setContent({
+                            ...content,
+                            items: [
+                              ...items,
+                              { id: `b-${Date.now()}`, title: '100% Private', description: 'Processed on-device in browser memory.' },
+                            ],
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-[#7C3AED] hover:underline"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Benefit
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {(content.items || []).map((item: any, idx: number) => (
+                        <div key={idx} className="p-3 bg-[#FAF9FF] border border-[#E4E2F0] rounded-xl space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-[#7C3AED]">Benefit #{idx + 1}</span>
+                            <div className="flex items-center gap-1">
+                              {idx > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const items = [...content.items];
+                                    const temp = items[idx - 1];
+                                    items[idx - 1] = items[idx];
+                                    items[idx] = temp;
+                                    setContent({ ...content, items });
+                                  }}
+                                  className="p-1 text-slate-500 hover:text-slate-800"
+                                  title="Move Up"
+                                >
+                                  <ArrowUp className="w-3 h-3" />
+                                </button>
+                              )}
+                              {idx < (content.items || []).length - 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const items = [...content.items];
+                                    const temp = items[idx + 1];
+                                    items[idx + 1] = items[idx];
+                                    items[idx] = temp;
+                                    setContent({ ...content, items });
+                                  }}
+                                  className="p-1 text-slate-500 hover:text-slate-800"
+                                  title="Move Down"
+                                >
+                                  <ArrowDown className="w-3 h-3" />
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const items = content.items.filter((_: any, i: number) => i !== idx);
+                                  setContent({ ...content, items });
+                                }}
+                                className="p-1 text-red-500 hover:text-red-700"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                          <input
+                            type="text"
+                            placeholder="Title"
+                            value={item.title || item.heading || ''}
+                            onChange={(e) => {
+                              const items = [...content.items];
+                              items[idx] = { ...items[idx], title: e.target.value };
+                              setContent({ ...content, items });
+                            }}
+                            className="w-full px-2.5 py-1.5 bg-white border border-[#E4E2F0] rounded text-xs font-bold"
+                          />
+                          <textarea
+                            rows={2}
+                            placeholder="Description"
+                            value={item.description || item.text || ''}
+                            onChange={(e) => {
+                              const items = [...content.items];
+                              items[idx] = { ...items[idx], description: e.target.value };
+                              setContent({ ...content, items });
+                            }}
+                            className="w-full px-2.5 py-1.5 bg-white border border-[#E4E2F0] rounded text-xs"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 22. SPACER */}
+                {block.type === 'spacer' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                        Spacer Height (Pixels)
+                      </label>
+                      <input
+                        type="number"
+                        min={4}
+                        max={240}
+                        value={content.height || 24}
+                        onChange={(e) => setContent({ ...content, height: Number(e.target.value) || 24 })}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] text-sm text-[#0F112E]"
+                      />
+                      <p className="text-xs text-[#5E6488] mt-1.5">
+                        Controls vertical spacing on the page between blocks.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 23. CUSTOM HTML */}
+                {block.type === 'custom_html' && (
+                  <div className="space-y-4">
+                    {/* View Switcher Tabs: Source Code vs Scoped CSS vs Live Preview */}
+                    <div className="flex items-center justify-between border-b border-[#E4E2F0] pb-2">
+                      <div className="flex items-center gap-1.5 p-1 bg-[#F4F3FA] rounded-xl border border-[#E4E2F0]">
+                        <button
+                          type="button"
+                          onClick={() => setHtmlViewMode('source')}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            htmlViewMode === 'source'
+                              ? 'bg-white text-[#7C3AED] shadow-sm'
+                              : 'text-[#5E6488] hover:text-[#0F112E]'
+                          }`}
+                        >
+                          <Code className="w-3.5 h-3.5" />
+                          <span>Source HTML</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHtmlViewMode('css')}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            htmlViewMode === 'css'
+                              ? 'bg-white text-[#7C3AED] shadow-sm'
+                              : 'text-[#5E6488] hover:text-[#0F112E]'
+                          }`}
+                        >
+                          <Palette className="w-3.5 h-3.5" />
+                          <span>Scoped CSS</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setHtmlViewMode('preview')}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            htmlViewMode === 'preview'
+                              ? 'bg-white text-[#7C3AED] shadow-sm'
+                              : 'text-[#5E6488] hover:text-[#0F112E]'
+                          }`}
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Sanitized Preview</span>
+                        </button>
+                      </div>
+
+                      <div className="text-right text-[11px] text-[#5E6488]">
+                        {htmlViewMode === 'css' ? (
+                          <>
+                            <span className="font-semibold text-[#0F112E]">
+                              {(content.css || '').length.toLocaleString()}
+                            </span>{' '}
+                            / 50,000 chars
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-semibold text-[#0F112E]">
+                              {(content.html || '').length.toLocaleString()}
+                            </span>{' '}
+                            / 200,000 chars
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Source Editor Tab */}
+                    {htmlViewMode === 'source' && (
+                      <div className="space-y-3">
+                        {/* Style extraction banner if HTML contains embedded <style> tags */}
+                        {/<style\b/i.test(content.html || '') && (
+                          <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-800">
+                            <span>Embedded &lt;style&gt; tag detected in HTML. Extract into Scoped CSS for security and scoping?</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const ext = extractStylesFromHtml(content.html);
+                                setContent({
+                                  ...content,
+                                  html: ext.html,
+                                  css: content.css ? `${content.css}\n\n${ext.extractedCss}` : ext.extractedCss,
+                                });
+                                setHtmlViewMode('css');
+                              }}
+                              className="px-2.5 py-1 bg-amber-600 text-white font-bold rounded-lg hover:bg-amber-700 transition-colors shrink-0"
+                            >
+                              Extract to CSS
+                            </button>
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                            HTML Markup
+                          </label>
+                          <textarea
+                            rows={14}
+                            value={content.html || ''}
+                            onChange={(e) => setContent({ ...content, html: e.target.value })}
+                            placeholder="<div class=&quot;custom-card&quot;>&#10;  <h3>Custom Title</h3>&#10;  <p>Your HTML content here...</p>&#10;</div>"
+                            className="w-full font-mono text-xs leading-relaxed px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-slate-900 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#7C3AED] focus:border-transparent selection:bg-[#7C3AED] selection:text-white"
+                            spellCheck={false}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                            Caption or Note (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={content.caption || ''}
+                            onChange={(e) => setContent({ ...content, caption: e.target.value })}
+                            placeholder="e.g. Embedded calculator widget or announcement callout"
+                            className="w-full px-3.5 py-2 rounded-xl border border-[#E4E2F0] text-xs text-[#0F112E]"
+                          />
+                          <p className="text-[11px] text-[#5E6488] mt-1">
+                            Shown as a subtle note or description beneath the custom HTML block if set.
+                          </p>
+                        </div>
+
+                        {/* Security & Allowed Tags Guidelines */}
+                        <div className="p-3 bg-[#FAF9FF] border border-[#E4E2F0] rounded-xl space-y-1.5 text-xs text-[#5E6488]">
+                          <p className="font-bold text-[#0F112E] flex items-center gap-1.5">
+                            <Shield className="w-3.5 h-3.5 text-[#7C3AED]" />
+                            Security & Safe HTML Guidelines
+                          </p>
+                          <p className="leading-relaxed text-[11px]">
+                            • Standard layout and semantic elements (<code className="text-[#7C3AED]">div</code>, <code className="text-[#7C3AED]">section</code>, <code className="text-[#7C3AED]">p</code>, <code className="text-[#7C3AED]">h1-h6</code>, <code className="text-[#7C3AED]">table</code>, <code className="text-[#7C3AED]">ul</code>, <code className="text-[#7C3AED]">img</code>, <code className="text-[#7C3AED]">a</code>) and Tailwind CSS classes are fully supported.
+                          </p>
+                          <p className="leading-relaxed text-[11px]">
+                            • Executable script tags (<code className="text-red-500">&lt;script&gt;</code>), embeds (<code className="text-red-500">&lt;iframe&gt;</code>, <code className="text-red-500">&lt;object&gt;</code>), form inputs, event handlers (<code className="text-red-500">onclick</code>, <code className="text-red-500">onload</code>), and <code className="text-red-500">javascript:</code> links are neutralized for XSS protection.
+                          </p>
+                          <p className="leading-relaxed text-[11px]">
+                            • For custom styling rules, use the <strong>Scoped CSS</strong> tab.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Scoped CSS Editor Tab */}
+                    {htmlViewMode === 'css' && (
+                      <div className="space-y-3">
+                        <div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <label className="text-xs font-bold uppercase tracking-wider text-[#5E6488]">
+                              Block CSS (Scoped)
+                            </label>
+                            <span className="text-[11px] text-[#7C3AED] font-semibold">
+                              Scoped to #{`custom-html-${block.id}`}
+                            </span>
+                          </div>
+                          <textarea
+                            rows={14}
+                            value={content.css || ''}
+                            onChange={(e) => setContent({ ...content, css: e.target.value })}
+                            placeholder={".custom-card {\n  padding: 1.5rem;\n  background: #f8fafc;\n  border-radius: 1rem;\n}\n.custom-card h3 {\n  color: #1e293b;\n  font-weight: 700;\n}"}
+                            className="w-full font-mono text-xs leading-relaxed px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-slate-900 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-[#7C3AED] focus:border-transparent selection:bg-[#7C3AED] selection:text-white"
+                            spellCheck={false}
+                          />
+                        </div>
+
+                        {/* CSS Security & Scoping Guidelines */}
+                        <div className="p-3 bg-[#FAF9FF] border border-[#E4E2F0] rounded-xl space-y-1.5 text-xs text-[#5E6488]">
+                          <p className="font-bold text-[#0F112E] flex items-center gap-1.5">
+                            <Palette className="w-3.5 h-3.5 text-[#7C3AED]" />
+                            Scoped Styling Rules & Guarantees
+                          </p>
+                          <p className="leading-relaxed text-[11px]">
+                            • Every selector is automatically prefixed with <code className="text-[#7C3AED]">#custom-html-{block.id}</code> to prevent bleeding into site headers, footers, or neighboring blocks.
+                          </p>
+                          <p className="leading-relaxed text-[11px]">
+                            • Global selectors (<code className="text-[#7C3AED]">:root</code>, <code className="text-[#7C3AED]">html</code>, <code className="text-[#7C3AED]">body</code>) are safely redirected to target this block container.
+                          </p>
+                          <p className="leading-relaxed text-[11px]">
+                            • <code className="text-red-500">@import</code> rules, external <code className="text-red-500">url(...)</code> asset requests, expressions, and angle brackets are neutralized.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Live Preview Tab */}
+                    {htmlViewMode === 'preview' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#7C3AED]">
+                            Sanitized Live Preview
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setHtmlViewMode('source')}
+                              className="text-xs text-[#7C3AED] hover:underline font-semibold"
+                            >
+                              Edit HTML
+                            </button>
+                            <span className="text-slate-300">•</span>
+                            <button
+                              type="button"
+                              onClick={() => setHtmlViewMode('css')}
+                              className="text-xs text-[#7C3AED] hover:underline font-semibold"
+                            >
+                              Edit CSS
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="p-4 rounded-xl border border-[#E4E2F0] bg-white min-h-[160px] max-h-[380px] overflow-auto shadow-inner">
+                          {content.css && (
+                            <style
+                              dangerouslySetInnerHTML={{
+                                __html: scopeAndSanitizeCss(content.css, `custom-html-${block.id}`),
+                              }}
+                            />
+                          )}
+                          {content.html && content.html.trim().length > 0 ? (
+                            <div
+                              id={`custom-html-${block.id}`}
+                              className="prose prose-sm max-w-none break-words"
+                              dangerouslySetInnerHTML={{
+                                __html: sanitizeCustomHtml(content.html),
+                              }}
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center py-8 text-center text-[#5E6488]">
+                              <Code className="w-8 h-8 text-slate-300 mb-2" />
+                              <p className="text-xs font-semibold">No HTML content entered yet</p>
+                              <p className="text-[11px] text-slate-400 mt-1">
+                                Switch to the Source HTML tab to write markup.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        {content.caption && (
+                          <p className="text-xs text-slate-500 italic text-center">
+                            Caption: {content.caption}
+                          </p>
+                        )}
+
+                        <p className="text-[11px] text-[#5E6488] italic">
+                          This preview renders both sanitized HTML and scoped CSS exactly as public visitors will see it.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 24. CONTAINER BLOCK */}
+                {block.type === 'container' && (
+                  <div className="space-y-4">
+                    {/* View Switcher Tabs: Settings vs Nested Blocks vs Live Preview */}
+                    <div className="flex items-center justify-between border-b border-[#E4E2F0] pb-2">
+                      <div className="flex items-center gap-1.5 p-1 bg-[#F4F3FA] rounded-xl border border-[#E4E2F0]">
+                        <button
+                          type="button"
+                          onClick={() => setContainerActiveTab('settings')}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            containerActiveTab === 'settings'
+                              ? 'bg-white text-[#7C3AED] shadow-sm'
+                              : 'text-[#5E6488] hover:text-[#0F112E]'
+                          }`}
+                        >
+                          <Palette className="w-3.5 h-3.5" />
+                          <span>Layout & Style</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setContainerActiveTab('children')}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            containerActiveTab === 'children'
+                              ? 'bg-white text-[#7C3AED] shadow-sm'
+                              : 'text-[#5E6488] hover:text-[#0F112E]'
+                          }`}
+                        >
+                          <Layers className="w-3.5 h-3.5" />
+                          <span>Child Blocks ({Array.isArray(content.blocks) ? content.blocks.length : 0})</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setContainerActiveTab('preview')}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            containerActiveTab === 'preview'
+                              ? 'bg-white text-[#7C3AED] shadow-sm'
+                              : 'text-[#5E6488] hover:text-[#0F112E]'
+                          }`}
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Container Preview</span>
+                        </button>
+                      </div>
+
+                      <div className="text-right text-[11px] text-[#5E6488]">
+                        <span className="font-semibold text-[#7C3AED]">
+                          Max Depth: {MAX_CONTAINER_DEPTH}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Tab 1: Layout & Style Settings */}
+                    {containerActiveTab === 'settings' && (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                              Inner Max Width
+                            </label>
+                            <select
+                              value={containerSettings.innerWidth}
+                              onChange={(e) =>
+                                setContainerSettings({
+                                  ...containerSettings,
+                                  innerWidth: e.target.value as ContainerInnerWidth,
+                                })
+                              }
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-white text-[#0F112E] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
+                            >
+                              <option value="narrow">Narrow (Max 48rem / 768px - Compact)</option>
+                              <option value="default">Default (Max 64rem / 1024px - Standard)</option>
+                              <option value="wide">Wide (Max 80rem / 1280px - Broad)</option>
+                              <option value="full">Full Width (100% - Edge to Edge)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                              Layout Direction
+                            </label>
+                            <select
+                              value={containerSettings.layout}
+                              onChange={(e) =>
+                                setContainerSettings({
+                                  ...containerSettings,
+                                  layout: e.target.value as ContainerLayout,
+                                })
+                              }
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-white text-[#0F112E] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
+                            >
+                              <option value="vertical">Vertical Stack (Column - default)</option>
+                              <option value="horizontal">Horizontal Row (Flex wrap, stacks on mobile)</option>
+                              <option value="grid">Responsive Grid (Multi-column desktop)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {containerSettings.layout === 'grid' && (
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                              Grid Columns (Desktop)
+                            </label>
+                            <select
+                              value={containerSettings.gridCols}
+                              onChange={(e) =>
+                                setContainerSettings({
+                                  ...containerSettings,
+                                  gridCols: Number(e.target.value) as ContainerGridCols,
+                                })
+                              }
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-white text-[#0F112E] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
+                            >
+                              <option value={2}>2 Columns (1 col mobile, 2 cols tablet/desktop)</option>
+                              <option value={3}>3 Columns (1 col mobile, 2 cols tablet, 3 cols desktop)</option>
+                              <option value={4}>4 Columns (1 col mobile, 2 cols tablet, 4 cols desktop)</option>
+                            </select>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                              Gap Spacing
+                            </label>
+                            <select
+                              value={containerSettings.gap}
+                              onChange={(e) =>
+                                setContainerSettings({
+                                  ...containerSettings,
+                                  gap: e.target.value as ContainerGap,
+                                })
+                              }
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-white text-[#0F112E] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
+                            >
+                              <option value="none">None (0px)</option>
+                              <option value="sm">Small (12px / 0.75rem)</option>
+                              <option value="md">Medium (24px / 1.5rem - default)</option>
+                              <option value="lg">Large (32px / 2rem)</option>
+                              <option value="xl">Extra Large (48px / 3rem)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                              Alignment
+                            </label>
+                            <select
+                              value={containerSettings.align}
+                              onChange={(e) =>
+                                setContainerSettings({
+                                  ...containerSettings,
+                                  align: e.target.value as ContainerAlign,
+                                })
+                              }
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-white text-[#0F112E] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
+                            >
+                              <option value="stretch">Stretch (Fill width/height - default)</option>
+                              <option value="start">Start (Top / Left)</option>
+                              <option value="center">Center</option>
+                              <option value="end">End (Bottom / Right)</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                              Padding
+                            </label>
+                            <select
+                              value={containerSettings.padding}
+                              onChange={(e) =>
+                                setContainerSettings({
+                                  ...containerSettings,
+                                  padding: e.target.value as ContainerPadding,
+                                })
+                              }
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-white text-[#0F112E] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
+                            >
+                              <option value="none">None (0px)</option>
+                              <option value="sm">Small (12-16px)</option>
+                              <option value="md">Medium (20-32px - default)</option>
+                              <option value="lg">Large (32-48px)</option>
+                              <option value="xl">Extra Large (40-64px)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                              Background Theme
+                            </label>
+                            <select
+                              value={containerSettings.background}
+                              onChange={(e) =>
+                                setContainerSettings({
+                                  ...containerSettings,
+                                  background: e.target.value as ContainerBackground,
+                                })
+                              }
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-white text-[#0F112E] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
+                            >
+                              <option value="transparent">Transparent (Default)</option>
+                              <option value="white">White with Shadow</option>
+                              <option value="muted">Warm Muted (#FAF9FF)</option>
+                              <option value="slate">Cool Slate (slate-50)</option>
+                              <option value="indigo">Soft Indigo Tint</option>
+                              <option value="purple">Soft Purple Tint</option>
+                              <option value="gradient">Subtle Diagonal Gradient</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                              Corner Radius
+                            </label>
+                            <select
+                              value={containerSettings.borderRadius}
+                              onChange={(e) =>
+                                setContainerSettings({
+                                  ...containerSettings,
+                                  borderRadius: e.target.value as ContainerBorderRadius,
+                                })
+                              }
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-white text-[#0F112E] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
+                            >
+                              <option value="none">None (0px)</option>
+                              <option value="sm">Small (6px)</option>
+                              <option value="md">Medium (8px)</option>
+                              <option value="lg">Large (12px)</option>
+                              <option value="xl">Extra Large (16px / 2xl - default)</option>
+                              <option value="2xl">Card Radius (28px)</option>
+                              <option value="full">Pill / Max Rounding</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#5E6488] mb-1.5">
+                              Border Style
+                            </label>
+                            <select
+                              value={containerSettings.border}
+                              onChange={(e) =>
+                                setContainerSettings({
+                                  ...containerSettings,
+                                  border: e.target.value as ContainerBorder,
+                                })
+                              }
+                              className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-[#E4E2F0] bg-white text-[#0F112E] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]"
+                            >
+                              <option value="none">None (Default)</option>
+                              <option value="subtle">Subtle (1px #E4E2F0)</option>
+                              <option value="solid">Solid (2px slate-300)</option>
+                              <option value="primary">Accent Brand (2px #7C3AED/30)</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tab 2: Child Blocks Management */}
+                    {containerActiveTab === 'children' && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#5E6488]">
+                            Nested Blocks ({Array.isArray(content.blocks) ? content.blocks.length : 0})
+                          </span>
+                        </div>
+
+                        {/* Child blocks list */}
+                        {Array.isArray(content.blocks) && content.blocks.length > 0 ? (
+                          <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                            {content.blocks.map((child: any, idx: number) => {
+                              const childType = String(child.type || 'paragraph');
+                              const childTitle =
+                                child.content?.title ||
+                                child.content?.heading ||
+                                child.content?.text ||
+                                child.content?.buttonText ||
+                                child.content?.question ||
+                                child.title ||
+                                child.text ||
+                                '';
+                              return (
+                                <div
+                                  key={child.id || idx}
+                                  className="p-3 bg-white border border-[#E4E2F0] rounded-xl flex items-center justify-between gap-3 shadow-xs hover:border-[#7C3AED]/40 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <span className="w-5 h-5 rounded-md bg-[#F4F0FD] text-[#7C3AED] text-[10px] font-bold flex items-center justify-center shrink-0">
+                                      {idx + 1}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-slate-100 text-slate-700 mr-1.5">
+                                        {childType}
+                                      </span>
+                                      <span className="text-xs font-semibold text-[#0F112E] truncate">
+                                        {childTitle || `Empty ${childType} block`}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {onSelectBlock && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleEditChildBlock(child.id)}
+                                        title="Edit Child Block"
+                                        className="p-1 text-slate-400 hover:text-[#7C3AED] hover:bg-[#F4F0FD] rounded transition-colors"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      disabled={idx === 0}
+                                      onClick={() => handleMoveChildBlock(idx, 'up')}
+                                      title="Move Up"
+                                      className="p-1 text-slate-400 hover:text-[#7C3AED] disabled:opacity-30 disabled:pointer-events-none"
+                                    >
+                                      <ArrowUp className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={idx === content.blocks.length - 1}
+                                      onClick={() => handleMoveChildBlock(idx, 'down')}
+                                      title="Move Down"
+                                      className="p-1 text-slate-400 hover:text-[#7C3AED] disabled:opacity-30 disabled:pointer-events-none"
+                                    >
+                                      <ArrowDown className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDuplicateChildBlock(idx)}
+                                      title="Duplicate Block"
+                                      className="p-1 text-slate-400 hover:text-[#7C3AED]"
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteChildBlock(idx)}
+                                      title="Delete Block"
+                                      className="p-1 text-slate-400 hover:text-red-600"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div className="py-8 text-center bg-[#FAF9FF] border border-dashed border-[#E4E2F0] rounded-xl text-[#5E6488]">
+                            <Layers className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                            <p className="text-xs font-semibold">Container has no child blocks yet</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                              Use the buttons below to insert child blocks into this container.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Add Child Block Buttons */}
+                        <div className="pt-2 border-t border-[#E4E2F0]">
+                          <span className="block text-[11px] font-bold uppercase tracking-wider text-[#5E6488] mb-2">
+                            Insert Child Block:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {[
+                              { type: 'heading', label: 'Heading' },
+                              { type: 'paragraph', label: 'Paragraph' },
+                              { type: 'cta', label: 'CTA Button' },
+                              { type: 'feature', label: 'Feature Card' },
+                              { type: 'faq', label: 'FAQ Item' },
+                              { type: 'image', label: 'Image' },
+                              { type: 'link', label: 'Link' },
+                              { type: 'rich_text', label: 'Rich Text' },
+                              { type: 'custom_html', label: 'Custom HTML' },
+                              ...(parentBlock ? [] : [{ type: 'container', label: 'Sub-Container' }]),
+                            ].map((item) => (
+                              <button
+                                key={item.type}
+                                type="button"
+                                onClick={() => handleAddChildBlock(item.type)}
+                                className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-[#E4E2F0] bg-white hover:bg-[#F4F0FD] hover:border-[#7C3AED]/40 hover:text-[#7C3AED] transition-colors shadow-2xs"
+                              >
+                                + {item.label}
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-[11px] text-[#5E6488] italic mt-2">
+                            Top-level sections (Hero, Popular Tools, Hubs, Pricing) are restricted from nesting inside containers.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tab 3: Container Preview */}
+                    {containerActiveTab === 'preview' && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#7C3AED]">
+                            Live Visual Preview
+                          </span>
+                          <span className="text-[11px] text-[#5E6488]">
+                            Layout: {containerSettings.layout} | Width: {containerSettings.innerWidth}
+                          </span>
+                        </div>
+
+                        <div className="p-4 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto min-h-[160px]">
+                          <div className={getContainerWrapperClasses(containerSettings)}>
+                            <div className={getContainerInnerClasses(containerSettings)}>
+                              {Array.isArray(content.blocks) && content.blocks.length > 0 ? (
+                                content.blocks.map((child: any, idx: number) => (
+                                  <div
+                                    key={child.id || idx}
+                                    className="p-3 bg-white/90 border border-slate-200 rounded-lg text-xs space-y-1 shadow-2xs"
+                                  >
+                                    <span className="text-[10px] uppercase font-bold text-[#7C3AED]">
+                                      {child.type}
+                                    </span>
+                                    <p className="font-semibold text-[#0F112E]">
+                                      {child.content?.title ||
+                                        child.content?.heading ||
+                                        child.content?.text ||
+                                        child.content?.buttonText ||
+                                        child.title ||
+                                        `Block #${idx + 1}`}
+                                    </p>
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-xs text-slate-400 italic text-center py-4">
+                                  No child blocks inside container.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <p className="text-[11px] text-[#5E6488] italic">
+                          Preview reflects current layout direction, background styling, border radius, padding, and gap spacing.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 

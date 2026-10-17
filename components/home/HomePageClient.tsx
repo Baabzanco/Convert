@@ -20,6 +20,10 @@ import {
   Type,
   Link as LinkIcon,
   CheckCircle2,
+  ClipboardPaste,
+  Copy,
+  Code,
+  Layers,
 } from 'lucide-react';
 import Container from '@/components/layout/Container';
 import ToolCard from '@/components/tool/ToolCard';
@@ -28,7 +32,22 @@ import FAQ from '@/components/seo/FAQ';
 import { GENERAL_FAQS } from '@/lib/faq';
 import { ResolvedCmsPage, CmsJsonLd, CmsBlockRenderer } from '@/lib/cms/page-resolver';
 import { sanitizeCustomCss } from '@/lib/admin/validation';
-import { UniversalContentBlock, duplicateBlock } from '@/lib/cms/blocks';
+import {
+  UniversalContentBlock,
+  duplicateBlock,
+  findBlockById,
+  findParentBlock,
+  updateBlockInTree,
+  deleteBlockFromTree,
+} from '@/lib/cms/blocks';
+import { DEFAULT_CONTAINER_SETTINGS } from '@/lib/cms/container-contract';
+import {
+  copyBlockToClipboard,
+  pasteBlockFromClipboard,
+  getClipboardState,
+  CLIPBOARD_EVENT_NAME,
+  getBlockLabel,
+} from '@/lib/cms/block-clipboard';
 import { getCanonicalHomepageBlocks } from '@/lib/cms/homepage-contract';
 import { InlineBlockWrapper } from '@/components/admin/inline/InlineBlockWrapper';
 import { InlineBlockEditorDrawer } from '@/components/admin/inline/InlineBlockEditorDrawer';
@@ -86,6 +105,24 @@ export default function HomePageClient({
   const [seoData, setSeoData] = useState<InlineSeoData | null>(
     () => (initialCmsPage?.seo as InlineSeoData) || null
   );
+
+  // In-session cross-page block clipboard state
+  const [clipboardState, setClipboardState] = useState<{
+    hasContent: boolean;
+    type?: string;
+    label?: string;
+  }>(() => getClipboardState());
+
+  useEffect(() => {
+    const updateState = () => setClipboardState(getClipboardState());
+    updateState();
+    window.addEventListener(CLIPBOARD_EVENT_NAME, updateState);
+    window.addEventListener('focus', updateState);
+    return () => {
+      window.removeEventListener(CLIPBOARD_EVENT_NAME, updateState);
+      window.removeEventListener('focus', updateState);
+    };
+  }, []);
 
   // Authenticate with server & load full draft page record if admin
   useEffect(() => {
@@ -351,12 +388,23 @@ export default function HomePageClient({
           order: nextOrder,
           enabled: true,
           content: {
+            title: 'Ready to Convert Your Files?',
+            description: 'Fast, secure, and completely private online conversion in your browser.',
+            buttonText: 'Explore Converters',
             label: 'Explore Converters',
             href: '#explore-hubs',
             variant: 'primary',
+            secondaryLabel: 'Learn More',
+            secondaryHref: '/about',
           },
+          title: 'Ready to Convert Your Files?',
+          description: 'Fast, secure, and completely private online conversion in your browser.',
+          buttonText: 'Explore Converters',
           label: 'Explore Converters',
           href: '#explore-hubs',
+          variant: 'primary',
+          secondaryLabel: 'Learn More',
+          secondaryHref: '/about',
         };
         break;
       case 'link':
@@ -388,6 +436,55 @@ export default function HomePageClient({
           description: 'Section subtitle explaining the content below.',
         };
         break;
+      case 'custom_html':
+        newBlock = {
+          id: newId,
+          type: 'custom_html',
+          order: nextOrder,
+          enabled: true,
+          content: {
+            html: '<div class="custom-card">\n  <h3>Custom Component</h3>\n  <p>Enter custom HTML and style it with scoped CSS or Tailwind utility classes.</p>\n</div>',
+            css: '.custom-card {\n  padding: 1.5rem;\n  background: #f8fafc;\n  border: 1px solid #e2e8f0;\n  border-radius: 1rem;\n}\n.custom-card h3 {\n  font-size: 1.125rem;\n  font-weight: 700;\n  color: #0f172a;\n  margin-bottom: 0.5rem;\n}\n.custom-card p {\n  font-size: 0.875rem;\n  color: #64748b;\n}',
+            caption: '',
+          },
+          html: '<div class="custom-card">\n  <h3>Custom Component</h3>\n  <p>Enter custom HTML and style it with scoped CSS or Tailwind utility classes.</p>\n</div>',
+          css: '.custom-card {\n  padding: 1.5rem;\n  background: #f8fafc;\n  border: 1px solid #e2e8f0;\n  border-radius: 1rem;\n}\n.custom-card h3 {\n  font-size: 1.125rem;\n  font-weight: 700;\n  color: #0f172a;\n  margin-bottom: 0.5rem;\n}\n.custom-card p {\n  font-size: 0.875rem;\n  color: #64748b;\n}',
+        };
+        break;
+      case 'container':
+        newBlock = {
+          id: newId,
+          type: 'container',
+          order: nextOrder,
+          enabled: true,
+          settings: { ...DEFAULT_CONTAINER_SETTINGS },
+          content: {
+            settings: { ...DEFAULT_CONTAINER_SETTINGS },
+            blocks: [
+              {
+                id: `blk-${Date.now()}-1`,
+                type: 'heading',
+                order: 1,
+                enabled: true,
+                content: { level: 3, text: 'Custom Container' },
+                level: 3,
+                text: 'Custom Container',
+              },
+              {
+                id: `blk-${Date.now()}-2`,
+                type: 'paragraph',
+                order: 2,
+                enabled: true,
+                content: { text: 'Group content in flexible layouts, grids, and backgrounds.' },
+                text: 'Group content in flexible layouts, grids, and backgrounds.',
+              },
+            ],
+          },
+          blocks: [],
+        };
+        newBlock.blocks = newBlock.content.blocks;
+        newBlock.children = newBlock.content.blocks;
+        break;
       default:
         newBlock = {
           id: newId,
@@ -404,9 +501,7 @@ export default function HomePageClient({
   };
 
   const handleUpdateSelectedBlock = (updatedBlock: UniversalContentBlock) => {
-    setActiveBlocks((prev) =>
-      prev.map((b) => (b.id === updatedBlock.id ? updatedBlock : b))
-    );
+    setActiveBlocks((prev) => updateBlockInTree(prev, updatedBlock));
     // If the updated block is hero and has a new title, update pageName as well
     if (updatedBlock.type === 'hero' && updatedBlock.content?.title) {
       setPageName(updatedBlock.content.title);
@@ -415,7 +510,7 @@ export default function HomePageClient({
   };
 
   const handleDeleteBlock = (blockId: string) => {
-    setActiveBlocks((prev) => prev.filter((b) => b.id !== blockId));
+    setActiveBlocks((prev) => deleteBlockFromTree(prev, blockId));
     setIsDirty(true);
     if (selectedBlockId === blockId) {
       setSelectedBlockId(null);
@@ -437,9 +532,68 @@ export default function HomePageClient({
 
   const handleDuplicateBlock = (block: UniversalContentBlock) => {
     const copy = duplicateBlock(block);
-    setActiveBlocks((prev) => [...prev, copy]);
+    const idx = activeBlocks.findIndex((b) => b.id === block.id);
+    const updated = [...activeBlocks];
+    if (idx !== -1) {
+      updated.splice(idx + 1, 0, copy);
+    } else {
+      updated.push(copy);
+    }
+    setActiveBlocks(updated.map((b, i) => ({ ...b, order: i })));
     setIsDirty(true);
     setSelectedBlockId(copy.id);
+    setFeedbackMessage({
+      type: 'success',
+      text: `Duplicated "${getBlockLabel(block.type)}" block on this page.`,
+    });
+  };
+
+  const handleCopyBlock = async (block: UniversalContentBlock) => {
+    const res = await copyBlockToClipboard(block);
+    if (res.success) {
+      setFeedbackMessage({ type: 'success', text: res.message });
+    } else {
+      setFeedbackMessage({ type: 'error', text: res.message });
+    }
+  };
+
+  const handlePasteBlock = async (afterBlockId?: string) => {
+    const res = await pasteBlockFromClipboard('home', activeBlocks.length);
+    if (!res.success || !res.block) {
+      setFeedbackMessage({
+        type: 'warning',
+        text: res.error || 'Failed to paste block.',
+      });
+      return;
+    }
+    const pasted = res.block;
+    let updated: UniversalContentBlock[];
+    if (afterBlockId) {
+      const idx = activeBlocks.findIndex((b) => b.id === afterBlockId);
+      updated = [...activeBlocks];
+      if (idx !== -1) {
+        updated.splice(idx + 1, 0, pasted);
+      } else {
+        updated.push(pasted);
+      }
+    } else if (selectedBlockId) {
+      const idx = activeBlocks.findIndex((b) => b.id === selectedBlockId);
+      updated = [...activeBlocks];
+      if (idx !== -1) {
+        updated.splice(idx + 1, 0, pasted);
+      } else {
+        updated.push(pasted);
+      }
+    } else {
+      updated = [...activeBlocks, pasted];
+    }
+    setActiveBlocks(updated.map((b, i) => ({ ...b, order: i })));
+    setIsDirty(true);
+    setSelectedBlockId(pasted.id);
+    setFeedbackMessage({
+      type: 'success',
+      text: `Pasted "${getBlockLabel(pasted.type)}" block successfully.`,
+    });
   };
 
   // Find canonical blocks from state
@@ -536,7 +690,8 @@ export default function HomePageClient({
   };
 
   const safeCustomCss = customCss ? sanitizeCustomCss(customCss) : '';
-  const selectedBlock = activeBlocks.find((b) => b.id === selectedBlockId) || null;
+  const selectedBlock = findBlockById(activeBlocks, selectedBlockId);
+  const parentContainer = findParentBlock(activeBlocks, selectedBlockId);
 
   const schemaJsonObj =
     seoData?.schemaJson && typeof seoData.schemaJson === 'object'
@@ -647,6 +802,41 @@ export default function HomePageClient({
               <LinkIcon className="w-3 h-3 text-purple-300" />
               <span>Link</span>
             </button>
+            <button
+              type="button"
+              onClick={() => handleAddBlock('custom_html')}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <Code className="w-3 h-3 text-amber-300" />
+              <span>Custom HTML</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddBlock('container')}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <Layers className="w-3 h-3 text-purple-300" />
+              <span>Container</span>
+            </button>
+            <div className="h-4 w-px bg-white/20 mx-1" />
+            <button
+              type="button"
+              onClick={() => handlePasteBlock()}
+              disabled={!clipboardState.hasContent}
+              title={
+                clipboardState.hasContent
+                  ? `Paste copied ${clipboardState.label || 'block'}`
+                  : 'Clipboard is empty. Copy a block first.'
+              }
+              className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors ${
+                clipboardState.hasContent
+                  ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-sm font-semibold'
+                  : 'bg-white/5 text-white/40 cursor-not-allowed'
+              }`}
+            >
+              <ClipboardPaste className="w-3 h-3 text-purple-200" />
+              <span>Paste Block{clipboardState.hasContent && clipboardState.label ? ` (${clipboardState.label})` : ''}</span>
+            </button>
           </div>
         </div>
       )}
@@ -661,6 +851,10 @@ export default function HomePageClient({
             isEditing={isEditingMode}
             isSelected={selectedBlockId === (heroBlock?.id || 'home-hero')}
             onSelect={() => setSelectedBlockId(heroBlock?.id || 'home-hero')}
+            onCopy={heroBlock ? () => handleCopyBlock(heroBlock) : undefined}
+            onPasteAfter={() => handlePasteBlock(heroBlock?.id || 'home-hero')}
+            canPaste={clipboardState.hasContent}
+            copiedBlockLabel={clipboardState.label}
           >
             <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-br from-[#FAF9FF] via-[#EEEDFC] to-[#E5E7FF] border border-[#E4E2F0] px-6 py-12 md:py-20 text-center shadow-xl shadow-indigo-100/50">
               <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full bg-violet-300/20 blur-3xl pointer-events-none" />
@@ -733,6 +927,10 @@ export default function HomePageClient({
                     onMoveDown={idx < customCmsBlocks.length - 1 ? () => handleMoveBlock(activeBlocks.indexOf(block), 'down') : undefined}
                     onDuplicate={() => handleDuplicateBlock(block)}
                     onDelete={() => handleDeleteBlock(block.id)}
+                    onCopy={() => handleCopyBlock(block)}
+                    onPasteAfter={() => handlePasteBlock(block.id)}
+                    canPaste={clipboardState.hasContent}
+                    copiedBlockLabel={clipboardState.label}
                   >
                     <CmsBlockRenderer blocks={[block as any]} />
                   </InlineBlockWrapper>
@@ -753,6 +951,10 @@ export default function HomePageClient({
             isEditing={isEditingMode}
             isSelected={selectedBlockId === (popularBlock?.id || 'home-popular-tools')}
             onSelect={() => setSelectedBlockId(popularBlock?.id || 'home-popular-tools')}
+            onCopy={popularBlock ? () => handleCopyBlock(popularBlock) : undefined}
+            onPasteAfter={() => handlePasteBlock(popularBlock?.id || 'home-popular-tools')}
+            canPaste={clipboardState.hasContent}
+            copiedBlockLabel={clipboardState.label}
           >
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-8">
               <div>
@@ -794,6 +996,10 @@ export default function HomePageClient({
             isEditing={isEditingMode}
             isSelected={selectedBlockId === (hubsBlock?.id || 'home-hubs')}
             onSelect={() => setSelectedBlockId(hubsBlock?.id || 'home-hubs')}
+            onCopy={hubsBlock ? () => handleCopyBlock(hubsBlock) : undefined}
+            onPasteAfter={() => handlePasteBlock(hubsBlock?.id || 'home-hubs')}
+            canPaste={clipboardState.hasContent}
+            copiedBlockLabel={clipboardState.label}
           >
             <div className="text-center max-w-2xl mx-auto mb-12">
               <h2
@@ -897,6 +1103,10 @@ export default function HomePageClient({
             isEditing={isEditingMode}
             isSelected={selectedBlockId === (featuresBlock?.id || 'home-features')}
             onSelect={() => setSelectedBlockId(featuresBlock?.id || 'home-features')}
+            onCopy={featuresBlock ? () => handleCopyBlock(featuresBlock) : undefined}
+            onPasteAfter={() => handlePasteBlock(featuresBlock?.id || 'home-features')}
+            canPaste={clipboardState.hasContent}
+            copiedBlockLabel={clipboardState.label}
           >
             <div className="text-center max-w-2xl mx-auto mb-12">
               <h2
@@ -943,6 +1153,10 @@ export default function HomePageClient({
             isEditing={isEditingMode}
             isSelected={selectedBlockId === (pricingBlock?.id || 'home-pricing')}
             onSelect={() => setSelectedBlockId(pricingBlock?.id || 'home-pricing')}
+            onCopy={pricingBlock ? () => handleCopyBlock(pricingBlock) : undefined}
+            onPasteAfter={() => handlePasteBlock(pricingBlock?.id || 'home-pricing')}
+            canPaste={clipboardState.hasContent}
+            copiedBlockLabel={clipboardState.label}
           >
             <div className="relative overflow-hidden rounded-[32px] bg-gradient-to-tr from-[#0F112E] to-[#1E1B4B] text-white p-8 md:p-12 shadow-xl border border-indigo-900/50">
               <div className="absolute top-0 right-0 -translate-y-1/3 translate-x-1/3 w-80 h-80 rounded-full bg-violet-600/30 blur-3xl pointer-events-none" />
@@ -1003,6 +1217,10 @@ export default function HomePageClient({
             isEditing={isEditingMode}
             isSelected={selectedBlockId === (faqBlock?.id || 'home-faq')}
             onSelect={() => setSelectedBlockId(faqBlock?.id || 'home-faq')}
+            onCopy={faqBlock ? () => handleCopyBlock(faqBlock) : undefined}
+            onPasteAfter={() => handlePasteBlock(faqBlock?.id || 'home-faq')}
+            canPaste={clipboardState.hasContent}
+            copiedBlockLabel={clipboardState.label}
           >
             <div className="space-y-4">
               <h2 className="text-2xl md:text-3xl font-extrabold text-[#0F112E] tracking-tight text-center mb-6">
@@ -1014,12 +1232,55 @@ export default function HomePageClient({
         </Container>
       </section>
 
+      {/* Additional CMS Content Blocks */}
+      {customCmsBlocks.length > 0 && (
+        <section className="py-8">
+          <Container>
+            <div className="space-y-6">
+              {customCmsBlocks.map((block) => {
+                const idx = activeBlocks.findIndex((b) => b.id === block.id);
+                return (
+                  <div key={block.id} className="relative group">
+                    <InlineBlockWrapper
+                      blockId={block.id}
+                      blockType={block.type}
+                      label={getBlockLabel(block.type)}
+                      isEditing={isEditingMode}
+                      isSelected={selectedBlockId === block.id}
+                      onSelect={() => setSelectedBlockId(block.id)}
+                      onMoveUp={idx > 0 ? () => handleMoveBlock(idx, 'up') : undefined}
+                      onMoveDown={idx < activeBlocks.length - 1 ? () => handleMoveBlock(idx, 'down') : undefined}
+                      onDuplicate={() => handleDuplicateBlock(block)}
+                      onDelete={() => handleDeleteBlock(block.id)}
+                      onCopy={() => handleCopyBlock(block)}
+                      onPasteAfter={() => handlePasteBlock(block.id)}
+                      canPaste={clipboardState.hasContent}
+                      copiedBlockLabel={clipboardState.label}
+                    >
+                      <CmsBlockRenderer
+                        blocks={[block as any]}
+                        isEditing={isEditingMode}
+                        selectedBlockId={selectedBlockId}
+                        onSelectBlock={setSelectedBlockId}
+                      />
+                    </InlineBlockWrapper>
+                  </div>
+                );
+              })}
+            </div>
+          </Container>
+        </section>
+      )}
+
       {/* Drawers for Block Editing, SEO, and Revisions */}
       <InlineBlockEditorDrawer
         block={selectedBlock}
+        parentBlock={parentContainer}
         isOpen={Boolean(selectedBlock && isEditingMode)}
         onClose={() => setSelectedBlockId(null)}
         onSaveBlock={handleUpdateSelectedBlock}
+        onSelectBlock={setSelectedBlockId}
+        onCopyBlock={selectedBlock ? () => handleCopyBlock(selectedBlock) : undefined}
       />
 
       <InlineSeoDrawer

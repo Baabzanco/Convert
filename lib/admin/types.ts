@@ -197,9 +197,78 @@ export interface UpdateToolContentInput {
   expectedUpdatedAt?: string;
 }
 
+export interface HeaderNavItem {
+  id: string;
+  label: string;
+  href: string;
+  order?: number;
+  visible?: boolean;
+  openNewTab?: boolean;
+  isExternal?: boolean;
+}
+
+export interface FooterLinkItem {
+  label: string;
+  href: string;
+  openNewTab?: boolean;
+}
+
+export interface FooterGroupItem {
+  title: string;
+  links: FooterLinkItem[];
+}
+
+export const DEFAULT_HEADER_NAV: HeaderNavItem[] = [
+  { id: 'nav-blog', label: 'Blog', href: '/blog', order: 1, visible: true, openNewTab: false },
+  { id: 'nav-pricing', label: 'Pricing', href: '/#pricing', order: 2, visible: true, openNewTab: false },
+  { id: 'nav-help', label: 'Help', href: '/#faq', order: 3, visible: true, openNewTab: false },
+];
+
+export const DEFAULT_FOOTER_GROUPS: FooterGroupItem[] = [
+  {
+    title: 'Tools & Converters',
+    links: [
+      { label: 'Image Tools Hub', href: '/image-tools' },
+      { label: 'PDF Tools Hub', href: '/pdf-tools' },
+      { label: 'JPG to PNG', href: '/tools/jpg-to-png' },
+      { label: 'Compress Image', href: '/tools/compress-image' },
+      { label: 'Merge PDF', href: '/tools/merge-pdf' },
+    ],
+  },
+  {
+    title: 'Formats & Guides',
+    links: [
+      { label: 'JPG Format Guide', href: '/formats/jpg' },
+      { label: 'PNG Format Guide', href: '/formats/png' },
+      { label: 'WEBP Format Guide', href: '/formats/webp' },
+      { label: 'PDF Format Guide', href: '/formats/pdf' },
+      { label: 'Blog & Tutorials', href: '/blog' },
+    ],
+  },
+  {
+    title: 'About & Legal',
+    links: [
+      { label: 'About Us', href: '/about' },
+      { label: 'Privacy Policy', href: '/privacy' },
+      { label: 'Terms of Service', href: '/terms' },
+      { label: 'Contact', href: '/contact' },
+    ],
+  },
+];
+
 export interface UpdateSettingsInput {
   siteName?: string;
   siteUrl?: string;
+  siteLogo?: string | null;
+  headerTagline?: string | null;
+  headerCtaLabel?: string | null;
+  headerCtaLink?: string | null;
+  headerCtaVisible?: boolean;
+  headerNav?: HeaderNavItem[];
+  footerDescription?: string | null;
+  copyrightText?: string | null;
+  trustText?: string | null;
+  footerGroups?: FooterGroupItem[];
   defaultSeoTitle?: string | null;
   defaultMetaDescription?: string | null;
   defaultOgImage?: string | null;
@@ -207,6 +276,11 @@ export interface UpdateSettingsInput {
   googleAnalyticsId?: string | null;
   googleAdSenseId?: string | null;
   socialLinks?: Record<string, string> | null;
+}
+
+export interface SiteSettingsData extends UpdateSettingsInput {
+  id: string;
+  updatedAt?: string | Date;
 }
 
 export interface AuditLogItem {

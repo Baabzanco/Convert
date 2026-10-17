@@ -491,13 +491,17 @@ export async function publishPost(id: string, author: AdminUserSession): Promise
  */
 export async function unpublishPost(id: string, author: AdminUserSession): Promise<BlogPostItem> {
   const db = getDb();
-  const existing = await db.blogPost.findUnique({ where: { id } });
+  let existing = await db.blogPost.findUnique({ where: { id } });
+  if (!existing) {
+    existing = await db.blogPost.findUnique({ where: { slug: id } });
+  }
   if (!existing) {
     throw new Error(`BlogPost not found: ${id}`);
   }
 
+  const postId = existing.id;
   const updated = await db.blogPost.update({
-    where: { id },
+    where: { id: postId },
     data: {
       status: 'DRAFT',
     },
@@ -509,13 +513,13 @@ export async function unpublishPost(id: string, author: AdminUserSession): Promi
     },
   });
 
-  await createRevisionSnapshot(id, author.id, 'Unpublished post');
+  await createRevisionSnapshot(postId, author.id, 'Unpublished post');
 
   await createAuditLog({
     userId: author.id,
     action: 'BLOG_POST_UNPUBLISHED',
     entityType: 'BLOG_POST',
-    entityId: id,
+    entityId: postId,
     metadata: { title: updated.title, slug: updated.slug },
   });
 
@@ -735,8 +739,14 @@ export async function deleteTag(id: string, author: AdminUserSession): Promise<v
 
 export async function listRevisions(postId: string): Promise<BlogPostRevisionItem[]> {
   const db = getDb();
+  let post = await db.blogPost.findUnique({ where: { id: postId } });
+  if (!post) {
+    post = await db.blogPost.findUnique({ where: { slug: postId } });
+  }
+  const actualPostId = post ? post.id : postId;
+
   const revisions = await db.postRevision.findMany({
-    where: { postId },
+    where: { postId: actualPostId },
     include: { author: true },
     orderBy: { createdAt: 'desc' },
   });
@@ -778,8 +788,17 @@ export async function restoreRevision(
   author: AdminUserSession
 ): Promise<BlogPostItem> {
   const db = getDb();
+  let post = await db.blogPost.findUnique({ where: { id: postId } });
+  if (!post) {
+    post = await db.blogPost.findUnique({ where: { slug: postId } });
+  }
+  if (!post) {
+    throw new Error(`BlogPost not found: ${postId}`);
+  }
+  const actualPostId = post.id;
+
   const revision = await db.postRevision.findUnique({ where: { id: revisionId } });
-  if (!revision || revision.postId !== postId) {
+  if (!revision || (revision.postId !== actualPostId && revision.postId !== postId)) {
     throw new Error(`Revision '${revisionId}' not found for post '${postId}'.`);
   }
 
@@ -789,7 +808,7 @@ export async function restoreRevision(
   const readingTime = calculateReadingTime(snapshot.content || '');
 
   const updated = await db.blogPost.update({
-    where: { id: postId },
+    where: { id: actualPostId },
     data: {
       title: snapshot.title,
       slug: snapshot.slug,
@@ -817,13 +836,13 @@ export async function restoreRevision(
   });
 
   // Create snapshot recording the restoration
-  await createRevisionSnapshot(postId, author.id, `Restored from revision ${revisionId.slice(0, 8)}`);
+  await createRevisionSnapshot(actualPostId, author.id, `Restored from revision ${revisionId.slice(0, 8)}`);
 
   await createAuditLog({
     userId: author.id,
     action: 'BLOG_POST_REVISION_RESTORED',
     entityType: 'BLOG_POST',
-    entityId: postId,
+    entityId: actualPostId,
     metadata: { restoredRevisionId: revisionId, title: updated.title },
   });
 

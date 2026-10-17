@@ -6,7 +6,7 @@ import { X, History, RotateCcw, Check, AlertCircle, Clock } from 'lucide-react';
 interface InlineRevisionDrawerProps {
   slug: string;
   pageId?: string;
-  entityType?: 'tool' | 'page';
+  entityType?: 'tool' | 'page' | 'blog';
   isOpen: boolean;
   onClose: () => void;
   onRevisionRestored: () => void;
@@ -29,16 +29,20 @@ export function InlineRevisionDrawer({
     if (isOpen) {
       loadRevisions();
     }
-  }, [isOpen, slug, pageId]);
+  }, [isOpen, slug, pageId, entityType]);
 
   const loadRevisions = async () => {
     setLoading(true);
     setMessage(null);
     try {
-      const url =
-        entityType === 'page' && pageId
-          ? `/api/admin/pages/${pageId}/revisions`
-          : `/api/admin/tools/${slug}/revisions`;
+      const targetId = pageId || slug;
+      let url = `/api/admin/tools/${slug}/revisions`;
+      if (entityType === 'page') {
+        url = `/api/admin/pages/${targetId}/revisions`;
+      } else if (entityType === 'blog') {
+        url = `/api/admin/blog/${targetId}/revisions`;
+      }
+
       const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
@@ -62,10 +66,14 @@ export function InlineRevisionDrawer({
     setRestoringId(revisionId);
     setMessage(null);
     try {
-      const restoreUrl =
-        entityType === 'page' && pageId
-          ? `/api/admin/pages/${pageId}/revisions/${revisionId}/restore`
-          : `/api/admin/tools/${slug}/revisions/${revisionId}/restore`;
+      const targetId = pageId || slug;
+      let restoreUrl = `/api/admin/tools/${slug}/revisions/${revisionId}/restore`;
+      if (entityType === 'page') {
+        restoreUrl = `/api/admin/pages/${targetId}/revisions/${revisionId}/restore`;
+      } else if (entityType === 'blog') {
+        restoreUrl = `/api/admin/blog/${targetId}/revisions/${revisionId}/restore`;
+      }
+
       const res = await fetch(restoreUrl, {
         method: 'POST',
       });
@@ -108,7 +116,9 @@ export function InlineRevisionDrawer({
                   <h3 id="revision-drawer-title" className="text-base font-bold text-[#0F112E]">
                     Revision History
                   </h3>
-                  <p className="text-xs text-[#5E6488]">Tool: {slug}</p>
+                  <p className="text-xs text-[#5E6488]">
+                    {entityType === 'blog' ? 'Article' : entityType === 'page' ? 'Page' : 'Tool'}: {slug}
+                  </p>
                 </div>
               </div>
               <button
@@ -148,7 +158,7 @@ export function InlineRevisionDrawer({
                 </div>
               ) : revisions.length === 0 ? (
                 <div className="py-12 text-center text-sm text-[#5E6488]">
-                  No prior revisions recorded for this tool yet.
+                  No prior revisions recorded for this {entityType === 'blog' ? 'article' : entityType === 'page' ? 'page' : 'tool'} yet.
                 </div>
               ) : (
                 revisions.map((rev, idx) => (

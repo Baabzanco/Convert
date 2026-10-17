@@ -11,23 +11,36 @@ import {
   Search, 
   ArrowRight, 
   Image as ImageIcon, 
-  FileText, 
-  Sparkles,
-  BookOpen,
-  DollarSign,
-  HelpCircle,
-  HelpCircle as HelpIcon
+  FileText,
 } from 'lucide-react';
 import Container from './Container';
 import { getAllTools, ToolDefinition } from '@/lib/tools';
+import { SiteSettingsData, HeaderNavItem, DEFAULT_HEADER_NAV } from '@/lib/admin/types';
 
-export function Header() {
+interface HeaderProps {
+  initialSettings?: Partial<SiteSettingsData>;
+}
+
+export function Header({ initialSettings }: HeaderProps = {}) {
+  const [settings, setSettings] = useState<Partial<SiteSettingsData>>(() => initialSettings || {});
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toolsMenuOpen, setToolsMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileImageOpen, setMobileImageOpen] = useState(false);
   const [mobilePdfOpen, setMobilePdfOpen] = useState(false);
+
+  // Listen to live settings changes from the inline shared settings drawer
+  useEffect(() => {
+    function handleLiveUpdate(e: Event) {
+      const customEvent = e as CustomEvent<SiteSettingsData>;
+      if (customEvent.detail) {
+        setSettings(customEvent.detail);
+      }
+    }
+    window.addEventListener('convert24:settings-updated', handleLiveUpdate);
+    return () => window.removeEventListener('convert24:settings-updated', handleLiveUpdate);
+  }, []);
 
   const pathname = usePathname() || '';
   const toolsRef = useRef<HTMLDivElement>(null);
@@ -89,9 +102,13 @@ export function Header() {
     ).slice(0, 5);
   }, [searchQuery, allTools]);
 
-  const navLinks = [
-    { href: '/blog', label: 'Blog', icon: BookOpen },
-  ];
+  const brandName = settings.siteName || 'Convert24';
+  const activeNavItems = useMemo(() => {
+    const navList = settings.headerNav && settings.headerNav.length > 0 ? settings.headerNav : DEFAULT_HEADER_NAV;
+    return navList
+      .filter((item) => item.visible !== false)
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+  }, [settings.headerNav]);
 
   return (
     <header className="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-[#E4E2F0] shadow-sm">
@@ -102,14 +119,34 @@ export function Header() {
           <Link
             href="/"
             className="flex items-center gap-2.5 text-[#0F112E] hover:text-[#7C3AED] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7C3AED] rounded-md p-1"
-            aria-label="Convert24 Home"
+            aria-label={`${brandName} Home`}
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#7C3AED] to-[#6366F1] flex items-center justify-center text-white shadow-md shadow-indigo-100">
-              <Layers className="w-5 h-5 text-white" aria-hidden="true" />
+            {settings.siteLogo ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={settings.siteLogo}
+                alt={brandName}
+                className="w-9 h-9 rounded-xl object-contain shadow-md shadow-indigo-100"
+              />
+            ) : (
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#7C3AED] to-[#6366F1] flex items-center justify-center text-white shadow-md shadow-indigo-100">
+                <Layers className="w-5 h-5 text-white" aria-hidden="true" />
+              </div>
+            )}
+            <div className="flex flex-col">
+              <span className="font-extrabold text-xl tracking-tight text-[#0F112E] leading-tight">
+                {brandName === 'Convert24' ? (
+                  <>Convert<span className="text-[#7C3AED]">24</span></>
+                ) : (
+                  brandName
+                )}
+              </span>
+              {settings.headerTagline && (
+                <span className="hidden lg:inline text-[10px] text-[#5E6488] font-medium tracking-tight truncate max-w-[200px]">
+                  {settings.headerTagline}
+                </span>
+              )}
             </div>
-            <span className="font-extrabold text-xl tracking-tight text-[#0F112E]">
-              Convert<span className="text-[#7C3AED]">24</span>
-            </span>
           </Link>
 
           {/* CENTER: Navigation Links */}
@@ -214,39 +251,26 @@ export function Header() {
               )}
             </div>
 
-            {/* Pricing (SaaS anchor) */}
-            <Link
-              href="/#pricing"
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-[#0F112E] hover:text-[#7C3AED] hover:bg-[#F4F3FA] transition-colors"
-            >
-              Pricing
-            </Link>
-
-            {/* Dynamic Blog Link */}
-            {navLinks.map((link) => {
-              const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
+            {/* Dynamic Navigation Items from CMS */}
+            {activeNavItems.map((item) => {
+              const isActive = pathname === item.href || (item.href !== '/' && !item.href.startsWith('/#') && pathname.startsWith(`${item.href}/`));
+              const isExt = item.isExternal || item.openNewTab || item.href.startsWith('http');
               return (
                 <Link
-                  key={link.href}
-                  href={link.href}
+                  key={item.id || item.href}
+                  href={item.href}
+                  target={isExt ? '_blank' : undefined}
+                  rel={isExt ? 'noopener noreferrer' : undefined}
                   className={`px-4 py-2 rounded-xl text-sm font-semibold transition-colors ${
                     isActive
                       ? 'text-[#7C3AED] bg-[#F4F0FD]'
                       : 'text-[#0F112E] hover:text-[#7C3AED] hover:bg-[#F4F3FA]'
                   }`}
                 >
-                  {link.label}
+                  {item.label}
                 </Link>
               );
             })}
-
-            {/* Help */}
-            <Link
-              href="/#faq"
-              className="px-4 py-2 rounded-xl text-sm font-semibold text-[#0F112E] hover:text-[#7C3AED] hover:bg-[#F4F3FA] transition-colors"
-            >
-              Help
-            </Link>
           </nav>
 
           {/* RIGHT: Search input + Actions */}
@@ -324,14 +348,16 @@ export function Header() {
               )}
             </div>
 
-            {/* Primary Action Button (Floating high-contrast accent CTA) */}
-            <Link
-              href="/#explore-hubs"
-              className="hidden md:inline-flex items-center gap-1.5 px-4.5 py-2 bg-gradient-to-r from-[#7C3AED] to-[#6366F1] hover:from-[#6D28D9] hover:to-[#4F46E5] text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98]"
-            >
-              <span>Explore All</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            {/* Primary Action Button (Configurable CTA) */}
+            {settings.headerCtaVisible !== false && (
+              <Link
+                href={settings.headerCtaLink || '/#explore-hubs'}
+                className="hidden md:inline-flex items-center gap-1.5 px-4.5 py-2 bg-gradient-to-r from-[#7C3AED] to-[#6366F1] hover:from-[#6D28D9] hover:to-[#4F46E5] text-white text-xs font-bold rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98]"
+              >
+                <span>{settings.headerCtaLabel || 'Explore All'}</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            )}
 
             {/* Mobile Menu Open Button */}
             <button
@@ -450,33 +476,39 @@ export function Header() {
             )}
           </div>
 
-          {/* Regular links */}
+          {/* Dynamic Navigation Links from CMS */}
           <div className="space-y-1 pt-2">
-            <Link
-              href="/blog"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2.5 p-3 rounded-xl text-sm font-bold text-[#0F112E] hover:bg-[#F4F3FA]"
-            >
-              <BookOpen className="w-4 h-4 text-[#5E6488]" />
-              Blog
-            </Link>
-            <Link
-              href="/#pricing"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2.5 p-3 rounded-xl text-sm font-bold text-[#0F112E] hover:bg-[#F4F3FA]"
-            >
-              <DollarSign className="w-4 h-4 text-[#5E6488]" />
-              Pricing
-            </Link>
-            <Link
-              href="/#faq"
-              onClick={() => setMobileMenuOpen(false)}
-              className="flex items-center gap-2.5 p-3 rounded-xl text-sm font-bold text-[#0F112E] hover:bg-[#F4F3FA]"
-            >
-              <HelpCircle className="w-4 h-4 text-[#5E6488]" />
-              Help
-            </Link>
+            {activeNavItems.map((item) => {
+              const isExt = item.isExternal || item.openNewTab || item.href.startsWith('http');
+              return (
+                <Link
+                  key={item.id || item.href}
+                  href={item.href}
+                  target={isExt ? '_blank' : undefined}
+                  rel={isExt ? 'noopener noreferrer' : undefined}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-between p-3 rounded-xl text-sm font-bold text-[#0F112E] hover:bg-[#F4F3FA]"
+                >
+                  <span>{item.label}</span>
+                  {isExt && <ArrowRight className="w-3.5 h-3.5 text-[#5E6488]" />}
+                </Link>
+              );
+            })}
           </div>
+
+          {/* Mobile CTA */}
+          {settings.headerCtaVisible !== false && (
+            <div className="pt-2">
+              <Link
+                href={settings.headerCtaLink || '/#explore-hubs'}
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center justify-center gap-1.5 w-full py-2.5 bg-gradient-to-r from-[#7C3AED] to-[#6366F1] text-white text-sm font-bold rounded-xl shadow-sm"
+              >
+                <span>{settings.headerCtaLabel || 'Explore All'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </header>

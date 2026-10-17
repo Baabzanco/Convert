@@ -11,11 +11,16 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   if (auth.errorResponse) return auth.errorResponse;
 
   const { id } = await params;
-  const page = await getPageById(id);
+  let page = await getPageById(id);
+  if (!page) {
+    const slugCandidate = id.startsWith('page-') ? id.replace(/^page-/, '') : id;
+    page = await getPageById(slugCandidate);
+  }
+
   if (!page) {
     return NextResponse.json({ error: 'Page not found' }, { status: 404 });
   }
 
-  const revisions = await getPageRevisions(id);
+  const revisions = await getPageRevisions(page.id);
   return NextResponse.json({ revisions });
 }

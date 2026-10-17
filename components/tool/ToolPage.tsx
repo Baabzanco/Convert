@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ToolDefinition, getToolBySlug } from '@/lib/tools';
 import Container from '@/components/layout/Container';
@@ -57,6 +57,10 @@ import {
   MousePointerClick,
   HelpCircle,
   Grid,
+  ClipboardPaste,
+  Copy,
+  Code,
+  Layers,
 } from 'lucide-react';
 import JsonLd from '@/components/seo/JsonLd';
 import {
@@ -66,7 +70,26 @@ import {
   createHowToSchema,
   siteConfig,
 } from '@/lib/seo';
-import { UniversalContentBlock, duplicateBlock } from '@/lib/cms/blocks';
+import {
+  UniversalContentBlock,
+  duplicateBlock,
+  findBlockById,
+  findParentBlock,
+  updateBlockInTree,
+  deleteBlockFromTree,
+} from '@/lib/cms/blocks';
+import { sanitizeCustomHtml, scopeAndSanitizeCss } from '@/lib/admin/validation';
+import {
+  DEFAULT_CONTAINER_SETTINGS,
+  getContainerWrapperClasses,
+  getContainerInnerClasses,
+} from '@/lib/cms/container-contract';
+import {
+  copyBlockToClipboard,
+  pasteBlockFromClipboard,
+  getClipboardState,
+  CLIPBOARD_EVENT_NAME,
+} from '@/lib/cms/block-clipboard';
 import { generateCanonicalToolContract } from '@/lib/cms/tool-contract';
 import { InlineBlockWrapper } from '@/components/admin/inline/InlineBlockWrapper';
 import { InlineBlockEditorDrawer } from '@/components/admin/inline/InlineBlockEditorDrawer';
@@ -80,7 +103,19 @@ interface ToolPageProps {
   isPreview?: boolean;
 }
 
-function CmsToolBlock({ block, tool }: { block: any; tool: ToolDefinition }) {
+function CmsToolBlock({
+  block,
+  tool,
+  isEditing,
+  selectedBlockId,
+  onSelectBlock,
+}: {
+  block: any;
+  tool: ToolDefinition;
+  isEditing?: boolean;
+  selectedBlockId?: string | null;
+  onSelectBlock?: (id: string) => void;
+}) {
   if (!block || block.enabled === false) return null;
 
   const type = block.type;
@@ -312,6 +347,27 @@ function CmsToolBlock({ block, tool }: { block: any; tool: ToolDefinition }) {
         />
       );
 
+    case 'custom_html': {
+      const rawHtml = content.html || block.html || '';
+      const rawCss = content.css || block.css || '';
+      const cleanHtml = sanitizeCustomHtml(rawHtml);
+      const scopeId = `custom-html-${block.id}`;
+      const cleanCss = rawCss ? scopeAndSanitizeCss(rawCss, scopeId) : '';
+      if (!cleanHtml && !cleanCss) return null;
+      return (
+        <div id={scopeId} className="custom-html-tool-block my-4 space-y-2">
+          {cleanCss && <style dangerouslySetInnerHTML={{ __html: cleanCss }} />}
+          <div
+            className="w-full overflow-x-auto"
+            dangerouslySetInnerHTML={{ __html: cleanHtml }}
+          />
+          {content.caption && (
+            <p className="text-xs text-[#5E6488] italic pt-1">{content.caption}</p>
+          )}
+        </div>
+      );
+    }
+
     case 'image':
       return (
         <figure className="my-6">
@@ -528,6 +584,77 @@ function CmsToolBlock({ block, tool }: { block: any; tool: ToolDefinition }) {
     case 'spacer':
       return <div style={{ height: `${content.height || 24}px` }} />;
 
+    case 'container': {
+      const containerSettings = block.settings || content.settings || {};
+      const wrapperClass = getContainerWrapperClasses(containerSettings);
+      const innerClass = getContainerInnerClasses(containerSettings);
+      const childBlocks = Array.isArray(content.blocks)
+        ? content.blocks
+        : Array.isArray(block.blocks)
+        ? block.blocks
+        : [];
+
+      return (
+        <div key={block.id} className={wrapperClass} data-block-id={block.id} data-block-type="container">
+          <div className={innerClass}>
+            {childBlocks.map((child: any) => {
+              const isChildSelected = selectedBlockId === child.id;
+              const renderedChild = (
+                <CmsToolBlock
+                  key={child.id}
+                  block={child}
+                  tool={tool}
+                  isEditing={isEditing}
+                  selectedBlockId={selectedBlockId}
+                  onSelectBlock={onSelectBlock}
+                />
+              );
+              if (!isEditing || !onSelectBlock) {
+                return renderedChild;
+              }
+              return (
+                <div
+                  key={child.id}
+                  data-child-block-id={child.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Select child ${child.type} block`}
+                  aria-pressed={isChildSelected}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectBlock(child.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onSelectBlock(child.id);
+                    }
+                  }}
+                  className={`relative group/child transition-all duration-150 rounded-xl outline-none cursor-pointer ${
+                    isChildSelected
+                      ? 'ring-2 ring-[#7C3AED] ring-offset-2 bg-[#7C3AED]/[0.03] shadow-sm'
+                      : 'hover:ring-2 hover:ring-[#7C3AED]/50 hover:ring-offset-1'
+                  }`}
+                >
+                  <div
+                    className={`absolute -top-2.5 left-3 z-10 px-2 py-0.5 rounded text-[10px] font-bold uppercase transition-opacity shadow-xs pointer-events-none ${
+                      isChildSelected
+                        ? 'bg-[#7C3AED] text-white opacity-100'
+                        : 'bg-slate-800 text-white opacity-0 group-hover/child:opacity-100'
+                    }`}
+                  >
+                    {child.type}
+                  </div>
+                  {renderedChild}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
     default:
       return null;
   }
@@ -558,6 +685,10 @@ function getBlockLabel(type: string): string {
       return 'Related Tools';
     case 'cta':
       return 'Call to Action';
+    case 'custom_html':
+      return 'Custom HTML';
+    case 'container':
+      return 'Container';
     default:
       return type.replace('_', ' ');
   }
@@ -588,6 +719,21 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
     type: 'success' | 'error' | 'warning';
     text: string;
   } | null>(null);
+
+  // Clipboard state tracking
+  const [clipboardState, setClipboardState] = useState(() => getClipboardState());
+
+  useEffect(() => {
+    const handleClipboardChange = () => {
+      setClipboardState(getClipboardState());
+    };
+    window.addEventListener(CLIPBOARD_EVENT_NAME, handleClipboardChange);
+    window.addEventListener('focus', handleClipboardChange);
+    return () => {
+      window.removeEventListener(CLIPBOARD_EVENT_NAME, handleClipboardChange);
+      window.removeEventListener('focus', handleClipboardChange);
+    };
+  }, []);
 
   const handleToggleEdit = () => {
     if (!isEditingMode && activeBlocks.length === 0) {
@@ -704,9 +850,7 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
   };
 
   const handleSaveBlockFromDrawer = (updatedBlock: UniversalContentBlock) => {
-    setActiveBlocks((prev) =>
-      prev.map((b) => (b.id === updatedBlock.id ? updatedBlock : b))
-    );
+    setActiveBlocks((prev) => updateBlockInTree(prev, updatedBlock));
     setIsDirty(true);
   };
 
@@ -765,10 +909,74 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
           type: 'cta',
           order: nextOrder,
           enabled: true,
-          content: { label: 'Explore More Converters', href: '/#explore-hubs', variant: 'primary' },
+          content: {
+            title: 'Need more file processing?',
+            description: 'Convert24 offers dozens of free, fast, private online conversion and PDF tools.',
+            buttonText: 'Explore More Converters',
+            label: 'Explore More Converters',
+            href: '/#explore-hubs',
+            variant: 'primary',
+            secondaryLabel: 'Learn More',
+            secondaryHref: '/about',
+          },
+          title: 'Need more file processing?',
+          description: 'Convert24 offers dozens of free, fast, private online conversion and PDF tools.',
+          buttonText: 'Explore More Converters',
           label: 'Explore More Converters',
           href: '/#explore-hubs',
+          variant: 'primary',
+          secondaryLabel: 'Learn More',
+          secondaryHref: '/about',
         };
+        break;
+      case 'custom_html':
+        newBlock = {
+          id: newId,
+          type: 'custom_html',
+          order: nextOrder,
+          enabled: true,
+          content: {
+            html: '<div class="custom-card">\n  <h3>Custom Component</h3>\n  <p>Enter custom HTML and style it with scoped CSS or Tailwind utility classes.</p>\n</div>',
+            css: '.custom-card {\n  padding: 1.5rem;\n  background: #f8fafc;\n  border: 1px solid #e2e8f0;\n  border-radius: 1rem;\n}\n.custom-card h3 {\n  font-size: 1.125rem;\n  font-weight: 700;\n  color: #0f172a;\n  margin-bottom: 0.5rem;\n}\n.custom-card p {\n  font-size: 0.875rem;\n  color: #64748b;\n}',
+            caption: '',
+          },
+          html: '<div class="custom-card">\n  <h3>Custom Component</h3>\n  <p>Enter custom HTML and style it with scoped CSS or Tailwind utility classes.</p>\n</div>',
+          css: '.custom-card {\n  padding: 1.5rem;\n  background: #f8fafc;\n  border: 1px solid #e2e8f0;\n  border-radius: 1rem;\n}\n.custom-card h3 {\n  font-size: 1.125rem;\n  font-weight: 700;\n  color: #0f172a;\n  margin-bottom: 0.5rem;\n}\n.custom-card p {\n  font-size: 0.875rem;\n  color: #64748b;\n}',
+        };
+        break;
+      case 'container':
+        newBlock = {
+          id: newId,
+          type: 'container',
+          order: nextOrder,
+          enabled: true,
+          settings: { ...DEFAULT_CONTAINER_SETTINGS },
+          content: {
+            settings: { ...DEFAULT_CONTAINER_SETTINGS },
+            blocks: [
+              {
+                id: `blk-${Date.now()}-1`,
+                type: 'heading',
+                order: 1,
+                enabled: true,
+                content: { level: 3, text: 'Custom Container' },
+                level: 3,
+                text: 'Custom Container',
+              },
+              {
+                id: `blk-${Date.now()}-2`,
+                type: 'paragraph',
+                order: 2,
+                enabled: true,
+                content: { text: 'Group content in flexible layouts, grids, and backgrounds.' },
+                text: 'Group content in flexible layouts, grids, and backgrounds.',
+              },
+            ],
+          },
+          blocks: [],
+        };
+        newBlock.blocks = newBlock.content.blocks;
+        newBlock.children = newBlock.content.blocks;
         break;
       default:
         newBlock = {
@@ -786,7 +994,7 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
   };
 
   const handleDeleteBlock = (blockId: string) => {
-    setActiveBlocks((prev) => prev.filter((b) => b.id !== blockId));
+    setActiveBlocks((prev) => deleteBlockFromTree(prev, blockId));
     setIsDirty(true);
     if (selectedBlockId === blockId) setSelectedBlockId(null);
   };
@@ -804,9 +1012,68 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
 
   const handleDuplicateBlock = (block: UniversalContentBlock) => {
     const copy = duplicateBlock(block);
-    setActiveBlocks((prev) => [...prev, copy]);
+    const idx = activeBlocks.findIndex((b) => b.id === block.id);
+    const updated = [...activeBlocks];
+    if (idx !== -1) {
+      updated.splice(idx + 1, 0, copy);
+    } else {
+      updated.push(copy);
+    }
+    setActiveBlocks(updated.map((b, i) => ({ ...b, order: i })));
     setIsDirty(true);
     setSelectedBlockId(copy.id);
+    setFeedbackMessage({
+      type: 'success',
+      text: `Duplicated "${getBlockLabel(block.type)}" block on this page.`,
+    });
+  };
+
+  const handleCopyBlock = async (block: UniversalContentBlock) => {
+    const res = await copyBlockToClipboard(block);
+    if (res.success) {
+      setFeedbackMessage({ type: 'success', text: res.message });
+    } else {
+      setFeedbackMessage({ type: 'error', text: res.message });
+    }
+  };
+
+  const handlePasteBlock = async (afterBlockId?: string) => {
+    const res = await pasteBlockFromClipboard('tool', activeBlocks.length);
+    if (!res.success || !res.block) {
+      setFeedbackMessage({
+        type: 'warning',
+        text: res.error || 'Failed to paste block.',
+      });
+      return;
+    }
+    const pasted = res.block;
+    let updated: UniversalContentBlock[];
+    if (afterBlockId) {
+      const idx = activeBlocks.findIndex((b) => b.id === afterBlockId);
+      updated = [...activeBlocks];
+      if (idx !== -1) {
+        updated.splice(idx + 1, 0, pasted);
+      } else {
+        updated.push(pasted);
+      }
+    } else if (selectedBlockId) {
+      const idx = activeBlocks.findIndex((b) => b.id === selectedBlockId);
+      updated = [...activeBlocks];
+      if (idx !== -1) {
+        updated.splice(idx + 1, 0, pasted);
+      } else {
+        updated.push(pasted);
+      }
+    } else {
+      updated = [...activeBlocks, pasted];
+    }
+    setActiveBlocks(updated.map((b, i) => ({ ...b, order: i })));
+    setIsDirty(true);
+    setSelectedBlockId(pasted.id);
+    setFeedbackMessage({
+      type: 'success',
+      text: `Pasted "${getBlockLabel(pasted.type)}" block into tool page.`,
+    });
   };
 
   const handleRevisionRestored = async () => {
@@ -877,7 +1144,8 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
   const hasCmsBlocks = blocksToRender.length > 0;
   const heroBlock = hasCmsBlocks ? blocksToRender.find((b: any) => b.type === 'hero' && b.enabled !== false) : null;
   const subsequentBlocks = hasCmsBlocks ? blocksToRender.filter((b: any) => b.type !== 'hero' && b.enabled !== false) : [];
-  const selectedBlock = activeBlocks.find((b) => b.id === selectedBlockId) || null;
+  const selectedBlock = findBlockById(activeBlocks, selectedBlockId);
+  const parentContainer = findParentBlock(activeBlocks, selectedBlockId);
 
   return (
     <>
@@ -935,6 +1203,41 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
               <MousePointerClick className="w-3 h-3 text-purple-300" />
               <span>CTA Button</span>
             </button>
+            <button
+              type="button"
+              onClick={() => handleAddBlock('custom_html')}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <Code className="w-3 h-3 text-amber-300" />
+              <span>Custom HTML</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleAddBlock('container')}
+              className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg flex items-center gap-1 transition-colors"
+            >
+              <Layers className="w-3 h-3 text-purple-300" />
+              <span>Container</span>
+            </button>
+            <div className="h-4 w-px bg-white/20 mx-1" />
+            <button
+              type="button"
+              onClick={() => handlePasteBlock()}
+              disabled={!clipboardState.hasContent}
+              title={
+                clipboardState.hasContent
+                  ? `Paste copied ${clipboardState.label || 'block'}`
+                  : 'Clipboard is empty. Copy a block first.'
+              }
+              className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-colors ${
+                clipboardState.hasContent
+                  ? 'bg-purple-600 hover:bg-purple-500 text-white shadow-sm font-semibold'
+                  : 'bg-white/5 text-white/40 cursor-not-allowed'
+              }`}
+            >
+              <ClipboardPaste className="w-3 h-3 text-purple-200" />
+              <span>Paste Block{clipboardState.hasContent && clipboardState.label ? ` (${clipboardState.label})` : ''}</span>
+            </button>
           </div>
         </div>
       )}
@@ -963,6 +1266,10 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
               isEditing={isEditingMode}
               isSelected={selectedBlockId === heroBlock.id}
               onSelect={() => setSelectedBlockId(heroBlock.id)}
+              onCopy={() => handleCopyBlock(heroBlock)}
+              onPasteAfter={() => handlePasteBlock(heroBlock.id)}
+              canPaste={clipboardState.hasContent}
+              copiedBlockLabel={clipboardState.label}
             >
               <CmsToolBlock block={heroBlock} tool={tool} />
             </InlineBlockWrapper>
@@ -1072,8 +1379,18 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
                 onMoveDown={idx < subsequentBlocks.length - 1 ? () => handleMoveBlock(activeBlocks.indexOf(block), 'down') : undefined}
                 onDuplicate={() => handleDuplicateBlock(block)}
                 onDelete={() => handleDeleteBlock(block.id)}
+                onCopy={() => handleCopyBlock(block)}
+                onPasteAfter={() => handlePasteBlock(block.id)}
+                canPaste={clipboardState.hasContent}
+                copiedBlockLabel={clipboardState.label}
               >
-                <CmsToolBlock block={block} tool={tool} />
+                <CmsToolBlock
+                  block={block}
+                  tool={tool}
+                  isEditing={isEditingMode}
+                  selectedBlockId={selectedBlockId}
+                  onSelectBlock={setSelectedBlockId}
+                />
               </InlineBlockWrapper>
             ))
           ) : (
@@ -1327,9 +1644,12 @@ export function ToolPage({ tool, isPreview = false }: ToolPageProps) {
 
       <InlineBlockEditorDrawer
         block={selectedBlock}
+        parentBlock={parentContainer}
         isOpen={isEditingMode && Boolean(selectedBlockId)}
         onClose={() => setSelectedBlockId(null)}
         onSaveBlock={handleSaveBlockFromDrawer}
+        onSelectBlock={setSelectedBlockId}
+        onCopyBlock={selectedBlock ? () => handleCopyBlock(selectedBlock) : undefined}
       />
 
       <InlineSeoDrawer

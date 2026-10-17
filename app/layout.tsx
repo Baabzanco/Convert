@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { defaultMetadata, createWebsiteSchema } from '@/lib/seo';
 import JsonLd from '@/components/seo/JsonLd';
+import { getPublicSiteSettings } from '@/lib/admin/services/settings.service';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -20,12 +21,13 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const websiteSchema = createWebsiteSchema();
+  const settings = await getPublicSiteSettings().catch(() => undefined);
 
   return (
     <html lang="en" className="h-full">
@@ -37,11 +39,11 @@ export default function RootLayout({
         >
           Skip to main content
         </a>
-        <Header />
+        <Header initialSettings={settings} />
         <main id="main-content" className="flex-1">
           {children}
         </main>
-        <Footer />
+        <Footer initialSettings={settings} />
       </body>
     </html>
   );

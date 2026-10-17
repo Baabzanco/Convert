@@ -17,16 +17,17 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const body = await req.json().catch(() => ({}));
     const action = body.action || 'publish';
 
-    let targetId = id;
     let existing = await getPageById(id);
-    if (!existing && (id === 'home' || id === 'page-home')) {
-      existing = await getPageBySlug('home');
-      if (existing) targetId = existing.id;
+    if (!existing) {
+      const slugCandidate = id.startsWith('page-') ? id.replace(/^page-/, '') : id;
+      existing = await getPageBySlug(slugCandidate);
     }
 
     if (!existing) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 });
     }
+
+    const targetId = existing.id;
 
     const page =
       action === 'unpublish'
