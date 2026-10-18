@@ -493,4 +493,236 @@ export interface ListAdminUsersOptions {
   sortOrder?: 'asc' | 'desc';
 }
 
+// ---------------------------------------------------------------------------
+// CMS JSON Backup & Restore Types (Phase 12.2-A)
+// ---------------------------------------------------------------------------
+
+export const CMS_BACKUP_FORMAT_IDENTIFIER = 'convert24-cms-backup';
+export const CMS_BACKUP_CURRENT_VERSION = 1;
+export const CMS_BACKUP_MAX_PAYLOAD_SIZE = 10 * 1024 * 1024; // 10MB
+
+export interface CmsBackupPage {
+  slug: string;
+  name: string;
+  status: PageStatus;
+  publishedAt?: string | null;
+  content: {
+    version: number;
+    isPublished: boolean;
+    blocks: any[];
+    customCss?: string | null;
+  };
+  seo?: PageSeoInput | null;
+}
+
+export interface CmsBackupTool {
+  toolSlug: string;
+  customTitle?: string | null;
+  customH1?: string | null;
+  customDescription?: string | null;
+  customIntro?: string | null;
+  customValueProp?: string | null;
+  customHowTo?: ToolHowToStep[] | null;
+  customFeatures?: ToolFeatureItem[] | null;
+  customFaq?: ToolFaqItem[] | null;
+  customRelatedTools?: string[] | null;
+  blocks?: any[] | null;
+  isPublished?: boolean;
+  seo?: PageSeoInput | null;
+}
+
+export interface CmsBackupBlogPost {
+  slug: string;
+  title: string;
+  excerpt?: string | null;
+  content: string;
+  featuredImage?: string | null;
+  featuredImageAlt?: string | null;
+  readingTime?: string | null;
+  status: PostStatus;
+  publishedAt?: string | null;
+  scheduledFor?: string | null;
+  categorySlug?: string | null;
+  tagSlugs?: string[];
+  seo?: PageSeoInput | null;
+}
+
+export interface CmsBackupBlogCategory {
+  slug: string;
+  name: string;
+  description?: string | null;
+}
+
+export interface CmsBackupBlogTag {
+  slug: string;
+  name: string;
+}
+
+export interface CmsBackupBlogTaxonomy {
+  categories: CmsBackupBlogCategory[];
+  tags: CmsBackupBlogTag[];
+}
+
+export interface CmsBackupNavigationItem {
+  menu: string;
+  label: string;
+  destination: string;
+  order: number;
+  visible: boolean;
+  icon?: string | null;
+  isExternal?: boolean;
+  openNewTab?: boolean;
+}
+
+export interface CmsBackupSiteSettings {
+  global: {
+    siteName?: string;
+    siteUrl?: string;
+    defaultSeoTitle?: string | null;
+    defaultMetaDescription?: string | null;
+    defaultOgImage?: string | null;
+    defaultTwitterImage?: string | null;
+    googleAnalyticsId?: string | null;
+    googleAdSenseId?: string | null;
+    socialLinks?: Record<string, string> | null;
+    headerTagline?: string | null;
+    headerCtaLabel?: string | null;
+    headerCtaLink?: string | null;
+    headerCtaVisible?: boolean;
+  };
+  navigation: CmsBackupNavigationItem[];
+  footer: {
+    brandDescription?: string | null;
+    copyrightText?: string | null;
+    trustText?: string | null;
+    linksJson?: any;
+  };
+}
+
+export interface CmsBackupFormatContent {
+  formatSlug: string;
+  customTitle?: string | null;
+  customDescription?: string | null;
+  customDetails?: string | null;
+  customBestFor?: string | null;
+  customPros?: string | null;
+  customCons?: string | null;
+}
+
+export interface CmsBackupMediaReference {
+  filename: string;
+  originalFilename?: string | null;
+  mimeType: string;
+  size: number;
+  width?: number | null;
+  height?: number | null;
+  url: string;
+  alt?: string | null;
+  title?: string | null;
+  caption?: string | null;
+  description?: string | null;
+}
+
+export interface CmsBackupData {
+  pages: CmsBackupPage[];
+  toolContent: CmsBackupTool[];
+  blogPosts: CmsBackupBlogPost[];
+  blogTaxonomy: CmsBackupBlogTaxonomy;
+  siteSettings: CmsBackupSiteSettings;
+  formatContents: CmsBackupFormatContent[];
+  mediaReferences: CmsBackupMediaReference[];
+}
+
+export interface CmsBackupFile {
+  exportFormat: string;
+  formatVersion: number;
+  exportedAt: string;
+  exportedBy: {
+    id: string;
+    email: string;
+    name: string;
+  };
+  site: {
+    name: string;
+    url: string;
+  };
+  data: CmsBackupData;
+}
+
+export interface CmsBackupItemDetail {
+  key: string;
+  title: string;
+  action: 'create' | 'update' | 'skip';
+  status: 'valid' | 'warning' | 'error';
+  reason?: string;
+}
+
+export interface CmsBackupSectionSummary {
+  total: number;
+  toCreate: number;
+  toUpdate: number;
+  toSkip: number;
+  errors: string[];
+  warnings: string[];
+  details: CmsBackupItemDetail[];
+}
+
+export interface CmsBackupPreviewResult {
+  isValid: boolean;
+  exportFormat: string;
+  formatVersion: number;
+  exportedAt?: string;
+  exportedBy?: {
+    id?: string;
+    email?: string;
+    name?: string;
+  };
+  site?: {
+    name?: string;
+    url?: string;
+  };
+  summary: {
+    pages: CmsBackupSectionSummary;
+    toolContent: CmsBackupSectionSummary;
+    blogPosts: CmsBackupSectionSummary;
+    blogTaxonomy: CmsBackupSectionSummary;
+    siteSettings: CmsBackupSectionSummary;
+    formatContents: CmsBackupSectionSummary;
+    mediaReferences: CmsBackupSectionSummary;
+  };
+  totals: {
+    totalRecords: number;
+    toCreate: number;
+    toUpdate: number;
+    toSkip: number;
+    totalErrors: number;
+    totalWarnings: number;
+  };
+  blockingErrors: string[];
+  warnings: string[];
+}
+
+export interface CmsBackupRestoreCounts {
+  pages: { created: number; updated: number; skipped: number };
+  toolContent: { created: number; updated: number; skipped: number };
+  blogPosts: { created: number; updated: number; skipped: number };
+  blogCategories: { created: number; updated: number; skipped: number };
+  blogTags: { created: number; updated: number; skipped: number };
+  siteSettings: { updated: boolean; navigationCount: number; footerUpdated: boolean; skipped: boolean };
+  formatContents: { created: number; updated: number; skipped: number };
+  mediaReferences: { created: number; updated: number; skipped: number };
+}
+
+export interface CmsBackupRestoreResult {
+  success: boolean;
+  message: string;
+  durationMs: number;
+  auditLogId?: string;
+  restored: CmsBackupRestoreCounts;
+  skippedCount: number;
+  failedCount: number;
+  errors?: string[];
+}
+
+
 

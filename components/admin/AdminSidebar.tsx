@@ -15,6 +15,7 @@ import {
   History,
   Shield,
   X,
+  Archive,
 } from 'lucide-react';
 import { AdminRole } from '@/lib/admin/types';
 
@@ -89,6 +90,11 @@ export function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
           name: 'Settings',
           href: '/admin/settings',
           icon: Settings,
+        },
+        {
+          name: 'Backup & Restore',
+          href: '/admin/backup',
+          icon: Archive,
         },
         {
           name: 'Audit Logs',
