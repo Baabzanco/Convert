@@ -19,6 +19,7 @@ import {
   createDraft,
   updateDraft,
 } from '../../lib/admin/services/blog.service';
+import { getDb } from '@/lib/db';
 
 // Mock database and cache dependencies for service unit tests
 vi.mock('@/lib/db', () => {
@@ -337,7 +338,6 @@ describe('Convert24 Security Remediation — SEC-02 Regression Protection', () =
   // SEC-FINDING-03: Deletion of Published Pages and Blog Posts
   // =========================================================================
   describe('SEC-FINDING-03: Published Deletion Protection', () => {
-    const { getDb } = vi.mocked(await import('@/lib/db'));
     const mockDb = getDb() as any;
 
     beforeEach(() => {
@@ -445,7 +445,6 @@ describe('Convert24 Security Remediation — SEC-02 Regression Protection', () =
   // SEC-FINDING-04: Revision Restore on Published Content
   // =========================================================================
   describe('SEC-FINDING-04: Revision Restore Authorization', () => {
-    const { getDb } = vi.mocked(await import('@/lib/db'));
     const mockDb = getDb() as any;
 
     beforeEach(() => {
@@ -587,7 +586,6 @@ describe('Convert24 Security Remediation — SEC-02 Regression Protection', () =
   // SEC-04: Publication Creation and Mutation Protection (Pages & Blog)
   // =========================================================================
   describe('SEC-04: Publication Authorization Enforcement (Pages & Blog)', () => {
-    const { getDb } = vi.mocked(await import('@/lib/db'));
     const mockDb = getDb() as any;
 
     beforeEach(() => {
@@ -720,15 +718,25 @@ describe('Convert24 Security Remediation — SEC-02 Regression Protection', () =
       });
 
       it('allows EDITOR to mutate a DRAFT page', async () => {
-        mockDb.page.findUnique.mockResolvedValue({
-          id: 'page-draft-2',
-          slug: 'draft-page-2',
-          name: 'Draft Page 2',
-          status: 'DRAFT',
-          publishedAt: null,
-          content: { version: 1, blocks: [] },
-          seo: null,
-        });
+        mockDb.page.findUnique
+          .mockResolvedValueOnce({
+            id: 'page-draft-2',
+            slug: 'draft-page-2',
+            name: 'Draft Page 2',
+            status: 'DRAFT',
+            publishedAt: null,
+            content: { version: 1, blocks: [] },
+            seo: null,
+          })
+          .mockResolvedValueOnce({
+            id: 'page-draft-2',
+            slug: 'draft-page-2',
+            name: 'Updated Draft Page',
+            status: 'DRAFT',
+            publishedAt: null,
+            content: { version: 1, blocks: [] },
+            seo: null,
+          });
         mockDb.page.update.mockResolvedValue({
           id: 'page-draft-2',
           slug: 'draft-page-2',
@@ -752,15 +760,25 @@ describe('Convert24 Security Remediation — SEC-02 Regression Protection', () =
       });
 
       it('allows CONTENT_MANAGER to mutate a PUBLISHED page', async () => {
-        mockDb.page.findUnique.mockResolvedValue({
-          id: 'page-pub-3',
-          slug: 'live-page-3',
-          name: 'Live Page 3',
-          status: 'PUBLISHED',
-          publishedAt: new Date(),
-          content: { version: 1, blocks: [] },
-          seo: null,
-        });
+        mockDb.page.findUnique
+          .mockResolvedValueOnce({
+            id: 'page-pub-3',
+            slug: 'live-page-3',
+            name: 'Live Page 3',
+            status: 'PUBLISHED',
+            publishedAt: new Date(),
+            content: { version: 1, blocks: [] },
+            seo: null,
+          })
+          .mockResolvedValueOnce({
+            id: 'page-pub-3',
+            slug: 'live-page-3',
+            name: 'Updated Live Page 3',
+            status: 'PUBLISHED',
+            publishedAt: new Date(),
+            content: { version: 1, blocks: [] },
+            seo: null,
+          });
         mockDb.page.update.mockResolvedValue({
           id: 'page-pub-3',
           slug: 'live-page-3',

@@ -61,6 +61,7 @@ export function isSafeUrl(url?: string | null): boolean {
     .replace(/&#x([0-9a-f]+);?/gi, (_: any, hex: string) => String.fromCharCode(parseInt(hex, 16)))
     .replace(/&#([0-9]+);?/gi, (_: any, dec: string) => String.fromCharCode(parseInt(dec, 10)))
     .replace(/&colon;/gi, ':')
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001F\u007F-\u009F\s]/g, '');
 
   // Block dangerous schemes
@@ -101,7 +102,7 @@ export function sanitizeRichTextHtml(rawHtml?: string | null): string {
   let sanitized = rawHtml;
 
   // 1. Recursively remove dangerous tags entirely until fixed point
-  let prev = '';
+  let prev: string;
   do {
     prev = sanitized;
     sanitized = sanitized.replace(/<\s*(script|iframe|object|embed|applet|style|form|input|button)[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
@@ -127,6 +128,7 @@ export function sanitizeRichTextHtml(rawHtml?: string | null): string {
         .replace(/&colon;/gi, ':')
         .replace(/&tab;/gi, '')
         .replace(/&newline;/gi, '')
+        // eslint-disable-next-line no-control-regex
         .replace(/[\u0000-\u001F\u007F-\u009F\s]/g, '')
         .toLowerCase();
 
@@ -209,7 +211,7 @@ export function sanitizeCustomHtml(rawHtml?: string | null): string {
     'gi'
   );
 
-  let prev = '';
+  let prev: string;
   do {
     prev = sanitized;
     sanitized = sanitized.replace(tagPattern, '');
@@ -244,6 +246,7 @@ export function sanitizeCustomHtml(rawHtml?: string | null): string {
         .replace(/&colon;/gi, ':')
         .replace(/&tab;/gi, '')
         .replace(/&newline;/gi, '')
+        // eslint-disable-next-line no-control-regex
         .replace(/[\u0000-\u001F\u007F-\u009F\s]/g, '')
         .toLowerCase();
 
@@ -266,7 +269,7 @@ export function sanitizeCustomHtml(rawHtml?: string | null): string {
   sanitized = sanitized.replace(
     /\s+style\s*=\s*(["'])([\s\S]*?)\1/gi,
     (match, quote, styleContent) => {
-      let cleanStyle = styleContent
+      const cleanStyle = styleContent
         .replace(/expression\s*\([^)]*\)/gi, '')
         .replace(/url\s*\(\s*["']?\s*javascript:[^)]*\)/gi, '')
         .replace(/url\s*\([^)]*\)/gi, 'none')

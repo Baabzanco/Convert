@@ -60,7 +60,6 @@ import {
   ClipboardPaste,
   Copy,
   Code,
-  Layers,
 } from 'lucide-react';
 import JsonLd from '@/components/seo/JsonLd';
 import {

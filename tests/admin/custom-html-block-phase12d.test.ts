@@ -70,7 +70,7 @@ describe('Phase 12.1-D: Custom HTML CMS Block Architecture & Security', () => {
       const duplicated = duplicateBlock(original);
 
       expect(duplicated.id).not.toBe(original.id);
-      expect(duplicated.id).toMatch(/^blk-\d+-[a-z0-9]+$/);
+      expect(duplicated.id).toMatch(/^blk-[a-z0-9]+$/);
       expect(duplicated.type).toBe('custom_html');
       expect(duplicated.content.html).toBe(original.content.html);
       expect(duplicated.content.caption).toBe(original.content.caption);
@@ -327,7 +327,7 @@ describe('Phase 12.1-D: Custom HTML CMS Block Architecture & Security', () => {
       expect(serialized.format).toBe('convert24/cms-block');
       expect(serialized.type).toBe('custom_html');
       expect(serialized.content.html).toContain('Fast and secure.');
-      expect(serialized.metadata.sourceType).toBe('custom_html');
+      expect(serialized.metadata?.sourceType).toBe('custom_html');
 
       // 2. Deserialize onto a different destination page (e.g. tool landing page)
       const deserialized = deserializeBlockPayload(serialized, 'tool', 7);

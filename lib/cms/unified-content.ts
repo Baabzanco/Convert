@@ -384,6 +384,31 @@ export const BLOCK_REGISTRY: Record<ContentBlockType, BlockDefinition> = {
       ],
     },
   },
+  container: {
+    type: 'container',
+    label: 'Container / Grid',
+    category: 'layout',
+    description: 'Multi-column layout container supporting nested child content blocks.',
+    iconName: 'LayoutGrid',
+    defaultContent: {
+      blocks: [],
+    },
+    defaultSettings: {
+      layout: 'grid',
+      columns: 2,
+      gap: 'md',
+    },
+  },
+  custom_html: {
+    type: 'custom_html',
+    label: 'Custom HTML Block',
+    category: 'layout',
+    description: 'Render custom HTML elements with sanitized and scoped styling.',
+    iconName: 'Code',
+    defaultContent: {
+      html: '<div>Custom HTML content</div>',
+    },
+  },
 };
 
 export function getBlockDefinition(type: ContentBlockType): BlockDefinition {

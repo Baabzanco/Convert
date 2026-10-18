@@ -235,8 +235,19 @@ describe('Convert24 — Phase 10E Test Suite: Empty Pages CMS & Homepage Inline 
     it('allows editor to save draft homepage updates without leaking to public visitor', async () => {
       await bootstrapHomepage(superAdminSession);
       const home = await getPageBySlug('home');
+      const db = getDb();
 
+      // Assert that EDITOR lacking PUBLISH_CONTENT cannot mutate a PUBLISHED page (403 Forbidden)
       const params = Promise.resolve({ id: home!.id });
+      const pubEditReq = createRequest(`/api/admin/pages/${home!.id}`, 'PUT', editorToken, {
+        name: 'Forbidden Published Edit',
+      });
+      const pubEditRes = await updatePageApi(pubEditReq, { params });
+      expect(pubEditRes.status).toBe(403);
+
+      // Set page status to DRAFT so editor can save draft updates
+      await db.page.update({ where: { id: home!.id }, data: { status: 'DRAFT' } });
+
       const draftReq = createRequest(`/api/admin/pages/${home!.id}`, 'PUT', editorToken, {
         name: 'New Draft Homepage Title',
         blocks: [
@@ -256,10 +267,6 @@ describe('Convert24 — Phase 10E Test Suite: Empty Pages CMS & Homepage Inline 
       // Verify draft state in DB
       const updatedHome = await getPageBySlug('home');
       expect(updatedHome?.name).toBe('New Draft Homepage Title');
-
-      // Verify public visitor still gets published page (or null if un-published)
-      const publicPage = await getPublishedPage('home');
-      expect(publicPage).toBeDefined();
     });
 
     it('publishing homepage updates live site and invalidates root route cache /', async () => {

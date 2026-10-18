@@ -135,6 +135,7 @@ describe('Phase 12.1-C: Cross-Page CMS Block Copy & Paste', () => {
       const sourceBlock: UniversalContentBlock = {
         id: 'faq-list-1',
         type: 'faq',
+        enabled: true,
         order: 1,
         content: {
           heading: 'Original FAQ Heading',
@@ -256,6 +257,8 @@ describe('Phase 12.1-C: Cross-Page CMS Block Copy & Paste', () => {
       const hubsPayload = serializeBlockPayload({
         id: 'hubs-1',
         type: 'hubs',
+        enabled: true,
+        order: 0,
         content: { heading: 'Explore All Hubs' },
       });
 
@@ -270,6 +273,8 @@ describe('Phase 12.1-C: Cross-Page CMS Block Copy & Paste', () => {
       const maliciousBlock: UniversalContentBlock = {
         id: 'xss-blk',
         type: 'rich_text',
+        enabled: true,
+        order: 0,
         content: {
           html: '<p>Valid text</p><script>alert("pwned")</script><img src="x" onerror="stealCookies()"><a href="javascript:alert(1)">Click</a>',
         },
@@ -290,6 +295,8 @@ describe('Phase 12.1-C: Cross-Page CMS Block Copy & Paste', () => {
       const unsafeCta: UniversalContentBlock = {
         id: 'cta-unsafe',
         type: 'cta',
+        enabled: true,
+        order: 0,
         content: {
           title: 'Unsafe CTA',
           href: 'javascript:document.location="https://attacker.com"',
@@ -299,18 +306,16 @@ describe('Phase 12.1-C: Cross-Page CMS Block Copy & Paste', () => {
 
       const payload = serializeBlockPayload(unsafeCta);
       const res = deserializeBlockPayload(payload, 'page', 0);
-      expect(res.success).toBe(true);
-      const pasted = res.block!;
-
-      // Unsafe URLs should be stripped to '#'
-      expect(pasted.content.href).toBe('#');
-      expect(pasted.content.secondaryHref).toBe('#');
+      expect(res.success).toBe(false);
+      expect(res.error).toMatch(/unsafe/i);
     });
 
     it('preserves valid absolute and relative URLs in links and CTAs', () => {
       const safeCta: UniversalContentBlock = {
         id: 'cta-safe',
         type: 'cta',
+        enabled: true,
+        order: 0,
         content: {
           title: 'Safe CTA',
           href: '/tools/merge-pdf',
@@ -344,11 +349,21 @@ describe('Phase 12.1-C: Cross-Page CMS Block Copy & Paste', () => {
           Object.keys(store).forEach((k) => delete store[k]);
         },
       };
-      Object.defineProperty(global, 'sessionStorage', { value: mockStorage, writable: true });
+      if (typeof window === 'undefined') {
+        Object.defineProperty(global, 'window', {
+          value: { ...global, dispatchEvent: vi.fn() },
+          writable: true,
+        });
+      } else if (!window.dispatchEvent) {
+        (window as any).dispatchEvent = vi.fn();
+      }
+      Object.defineProperty(window, 'sessionStorage', { value: mockStorage, writable: true });
 
       const blockToCopy: UniversalContentBlock = {
         id: 'b-99',
         type: 'cta',
+        enabled: true,
+        order: 0,
         content: { title: 'Copy me' },
       };
 
@@ -365,11 +380,22 @@ describe('Phase 12.1-C: Cross-Page CMS Block Copy & Paste', () => {
       const blockToCopy: UniversalContentBlock = {
         id: 'b-fallback-1',
         type: 'feature',
+        enabled: true,
+        order: 0,
         content: { title: 'Fallback Feature', description: 'Works without permissions' },
       };
 
+      if (typeof window === 'undefined') {
+        Object.defineProperty(global, 'window', {
+          value: { ...global, dispatchEvent: vi.fn() },
+          writable: true,
+        });
+      } else if (!window.dispatchEvent) {
+        (window as any).dispatchEvent = vi.fn();
+      }
+
       // Set navigator.clipboard to throw permission error
-      Object.defineProperty(global, 'navigator', {
+      Object.defineProperty(window, 'navigator', {
         value: {
           clipboard: {
             writeText: vi.fn().mockRejectedValue(new Error('Permission denied')),

@@ -464,3 +464,14 @@ export function clearBlockClipboard(): void {
     window.dispatchEvent(new CustomEvent(CLIPBOARD_EVENT_NAME, { detail: null }));
   }
 }
+
+/**
+ * Convenience helper to deserialize clipboard string and return block or null.
+ */
+export function deserializeAndPasteBlock(
+  clipboardStr: string,
+  currentBlocksCount = 0
+): UniversalContentBlock | null {
+  const result = deserializeBlockPayload(clipboardStr, undefined, currentBlocksCount);
+  return result.success && result.block ? result.block : null;
+}

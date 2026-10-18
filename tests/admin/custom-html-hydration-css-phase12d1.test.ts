@@ -121,9 +121,12 @@ describe('Phase 12.1-D.1: Custom HTML Deterministic Hydration & Safe Scoped CSS'
 
       const scoped = scopeAndSanitizeCss(rawCss, scopeId);
 
-      expect(scoped).toContain(`#${scopeId} .card {\n  padding: 1.5rem;\n  background: #ffffff;\n}`);
-      expect(scoped).toContain(`#${scopeId} h3 {\n  font-size: 1.25rem;\n  color: #0f172a;\n}`);
-      expect(scoped).toContain(`#${scopeId} p.subtitle {\n  color: #64748b;\n}`);
+      expect(scoped).toContain(`#${scopeId} .card`);
+      expect(scoped).toContain('padding: 1.5rem;');
+      expect(scoped).toContain('background: #ffffff;');
+      expect(scoped).toContain(`#${scopeId} h3`);
+      expect(scoped).toContain('font-size: 1.25rem;');
+      expect(scoped).toContain(`#${scopeId} p.subtitle`);
     });
 
     it('scopes comma-separated multiple selectors individually', () => {

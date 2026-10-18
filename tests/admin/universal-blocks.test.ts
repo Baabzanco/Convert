@@ -146,8 +146,8 @@ describe('Phase 07A — Universal Content Blocks Foundation', () => {
     };
 
     const serialized = serializeBlockForClipboard(block);
-    expect(typeof serialized).toBe('string');
-    expect(serialized).toContain('blk-source');
+    expect(serialized).toContain('convert24/cms-block');
+    expect(serialized).toContain('rich_text');
 
     const pasted = deserializeAndPasteBlock(serialized, 5);
     

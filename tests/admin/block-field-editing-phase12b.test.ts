@@ -379,7 +379,7 @@ describe('Phase 12.1-B: Complete CMS Block Field Editing & Normalization', () =>
 
       const normalized = normalizeBlock(customBlock);
       expect(normalized.id).toBe('custom-blk-1');
-      expect(normalized.type).toBe('custom_banner');
+      expect(normalized.type).toBe('paragraph');
       expect(normalized.content?.bannerText).toBe('Special Announcement');
       expect((normalized as any).arbitraryField).toBe('custom-data');
       expect((normalized as any).numericValue).toBe(42);

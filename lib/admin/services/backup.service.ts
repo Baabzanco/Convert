@@ -584,7 +584,7 @@ export async function validateAndPreviewBackup(rawInput: unknown): Promise<CmsBa
           slug,
           name,
           blocks: page.content?.blocks,
-          customCss: page.content?.customCss,
+          customCss: page.content?.customCss || undefined,
           seo: page.seo || undefined,
         });
 
@@ -1495,7 +1495,7 @@ export async function restoreCmsBackup(
             slug: p.slug,
             name: p.name,
             blocks: p.content?.blocks,
-            customCss: p.content?.customCss,
+            customCss: p.content?.customCss || undefined,
             seo: p.seo || undefined,
           });
 
