@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAuth } from '@/lib/admin/guard';
+import { hasPermission } from '@/lib/admin/permissions';
 import { listPosts, createDraft } from '@/lib/admin/services/blog.service';
+import { handleAdminApiError } from '@/lib/admin/api-error';
 import { PostStatus } from '@/lib/admin/types';
 
 export async function GET(req: NextRequest) {
@@ -33,10 +35,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+
+    if ((body.status === 'PUBLISHED' || body.status === 'SCHEDULED') && !hasPermission(auth.user.role, 'PUBLISH_CONTENT')) {
+      return NextResponse.json(
+        {
+          error: `Forbidden: Role '${auth.user.role}' lacks 'PUBLISH_CONTENT' permission to publish or schedule blog posts.`,
+          failureType: 'forbidden',
+        },
+        { status: 403 }
+      );
+    }
+
     const post = await createDraft(body, auth.user);
     return NextResponse.json({ post, success: true }, { status: 201 });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to create blog post draft.';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return handleAdminApiError(err);
   }
 }

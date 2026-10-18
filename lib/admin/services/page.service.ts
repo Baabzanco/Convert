@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { CreatePageInput, UpdatePageInput, AdminUserSession } from '../types';
 import { createAuditLog } from './audit.service';
 import { validatePagePayload } from '../validation';
+import { hasPermission } from '../permissions';
 
 export interface BootstrapHomepageResult {
   created: boolean;
@@ -203,6 +204,10 @@ export async function createDraftPage(input: CreatePageInput, author: AdminUserS
 
   const sanitizedBlocks = validation.sanitizedBlocks.length > 0 ? validation.sanitizedBlocks : input.blocks || [];
 
+  if (input.status === 'PUBLISHED' && !hasPermission(author.role, 'PUBLISH_CONTENT')) {
+    throw new Error(`Forbidden: Role '${author.role}' lacks 'PUBLISH_CONTENT' permission to create published pages.`);
+  }
+
   const page = await db.page.create({
     data: {
       slug: cleanSlug,
@@ -288,6 +293,14 @@ export async function updateDraftPage(
 
   const actualPageId = existing.id;
 
+  if (existing.status === 'PUBLISHED' && !hasPermission(author.role, 'PUBLISH_CONTENT')) {
+    throw new Error(`Forbidden: Role '${author.role}' lacks 'PUBLISH_CONTENT' permission to modify published pages.`);
+  }
+
+  if (input.status === 'PUBLISHED' && !hasPermission(author.role, 'PUBLISH_CONTENT')) {
+    throw new Error(`Forbidden: Role '${author.role}' lacks 'PUBLISH_CONTENT' permission to publish pages.`);
+  }
+
   const validation = validatePagePayload(input);
   if (!validation.isValid) {
     const errorDetails = validation.report.errors.map((e) => `${e.field}: ${e.message}`).join(', ');
@@ -297,6 +310,12 @@ export async function updateDraftPage(
   // Update Page details
   const updateData: any = {};
   if (input.name) updateData.name = input.name.trim();
+  if (input.status) {
+    updateData.status = input.status;
+    if (input.status === 'PUBLISHED' && !existing.publishedAt) {
+      updateData.publishedAt = new Date();
+    }
+  }
   if (input.slug) {
     const cleanSlug = input.slug.trim().toLowerCase().replace(/[^a-z0-9-_]/g, '-');
     if (existing.slug === 'home' && cleanSlug !== 'home') {
@@ -539,6 +558,10 @@ export async function deletePage(id: string, author: AdminUserSession) {
     throw new Error("Cannot delete the reserved 'home' page.");
   }
 
+  if (page.status === 'PUBLISHED' && !hasPermission(author.role, 'PUBLISH_CONTENT')) {
+    throw new Error(`Forbidden: Role '${author.role}' lacks 'PUBLISH_CONTENT' permission to delete published pages.`);
+  }
+
   const actualPageId = page.id;
   await db.page.delete({ where: { id: actualPageId } });
 
@@ -617,6 +640,10 @@ export async function restorePageRevision(
     });
   }
   if (!page) throw new Error(`Page not found: ${pageId}`);
+
+  if (page.status === 'PUBLISHED' && !hasPermission(author.role, 'PUBLISH_CONTENT')) {
+    throw new Error(`Forbidden: Role '${author.role}' lacks 'PUBLISH_CONTENT' permission to restore revisions on published pages.`);
+  }
 
   const actualPageId = page.id;
   const revision = await getPageRevisionById(actualPageId, revisionId);

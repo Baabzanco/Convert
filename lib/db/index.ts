@@ -129,6 +129,47 @@ function initMemoryStore(): MemoryStorage {
 
 const memoryStore: MemoryStorage = initMemoryStore();
 
+function cloneMemoryStore(store: MemoryStorage): MemoryStorage {
+  return {
+    adminUsers: new Map(Array.from(store.adminUsers.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    pages: new Map(Array.from(store.pages.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    pageContents: new Map(Array.from(store.pageContents.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    pageSeos: new Map(Array.from(store.pageSeos.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    toolContents: new Map(Array.from(store.toolContents.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    toolSeos: new Map(Array.from(store.toolSeos.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    pageRevisions: JSON.parse(JSON.stringify(store.pageRevisions)),
+    toolRevisions: JSON.parse(JSON.stringify(store.toolRevisions)),
+    blogPosts: new Map(Array.from(store.blogPosts.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    blogCategories: new Map(Array.from(store.blogCategories.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    blogTags: new Map(Array.from(store.blogTags.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    postTags: new Map(Array.from(store.postTags.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    postSeos: new Map(Array.from(store.postSeos.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    postRevisions: JSON.parse(JSON.stringify(store.postRevisions)),
+    mediaAssets: new Map(Array.from(store.mediaAssets.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    auditLogs: JSON.parse(JSON.stringify(store.auditLogs)),
+    globalSettings: JSON.parse(JSON.stringify(store.globalSettings)),
+    navigationItems: new Map(Array.from(store.navigationItems.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    footerSettings: new Map(Array.from(store.footerSettings.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+    formatContents: new Map(Array.from(store.formatContents.entries()).map(([k, v]) => [k, JSON.parse(JSON.stringify(v))])),
+  };
+}
+
+function restoreMemoryStore(target: MemoryStorage, snapshot: MemoryStorage) {
+  for (const [key, val] of Object.entries(snapshot)) {
+    if (val instanceof Map) {
+      (target as any)[key].clear();
+      for (const [k, v] of val.entries()) {
+        (target as any)[key].set(k, v);
+      }
+    } else if (Array.isArray(val)) {
+      (target as any)[key] = [...val];
+    } else {
+      (target as any)[key] = { ...val };
+    }
+  }
+}
+
+
 // Seed default initial pages into memory
 const DEFAULT_PAGES = [
   { id: 'page-home', slug: 'home', name: 'Home Page', status: 'PUBLISHED' as PageStatus },
@@ -461,6 +502,21 @@ function shouldUsePrisma(): boolean {
  * for reliable unit testing and offline development.
  */
 export const memoryDb = {
+  async $transaction(fnOrArray: any) {
+    if (typeof fnOrArray === 'function') {
+      const snapshot = cloneMemoryStore(memoryStore);
+      try {
+        return await fnOrArray(memoryDb);
+      } catch (err) {
+        restoreMemoryStore(memoryStore, snapshot);
+        throw err;
+      }
+    }
+    if (Array.isArray(fnOrArray)) {
+      return Promise.all(fnOrArray);
+    }
+    throw new Error('Unsupported $transaction argument');
+  },
   adminUser: {
     async findUnique({ where }: { where: { id?: string; email?: string } }) {
       if (where.id) {
@@ -674,6 +730,21 @@ export const memoryDb = {
       }
       return existing || null;
     },
+    async upsert({ where, create, update, include }: { where: { slug?: string; id?: string }; create: any; update: any; include?: any }) {
+      let existing: any = null;
+      if (where.slug) {
+        for (const p of memoryStore.pages.values()) {
+          if (p.slug === where.slug) { existing = p; break; }
+        }
+      } else if (where.id) {
+        existing = memoryStore.pages.get(where.id);
+      }
+      if (existing) {
+        return memoryDb.page.update({ where: { id: existing.id }, data: update, include });
+      } else {
+        return memoryDb.page.create({ data: create, include });
+      }
+    },
     async count({ where }: { where?: any } = {}) {
       if (!where) return memoryStore.pages.size;
       let count = 0;
@@ -720,6 +791,14 @@ export const memoryDb = {
       memoryStore.pageContents.set(where.pageId, updated);
       return { ...updated };
     },
+    async upsert({ where, create, update }: { where: { pageId: string }; create: any; update: any }) {
+      const existing = memoryStore.pageContents.get(where.pageId);
+      if (existing) {
+        return memoryDb.pageContent.update({ where, data: update });
+      } else {
+        return memoryDb.pageContent.create({ data: create });
+      }
+    },
   },
 
   pageSeo: {
@@ -749,6 +828,14 @@ export const memoryDb = {
       };
       memoryStore.pageSeos.set(where.pageId, updated);
       return { ...updated };
+    },
+    async upsert({ where, create, update }: { where: { pageId: string }; create: any; update: any }) {
+      const existing = memoryStore.pageSeos.get(where.pageId);
+      if (existing) {
+        return memoryDb.pageSeo.update({ where, data: update });
+      } else {
+        return memoryDb.pageSeo.create({ data: create });
+      }
     },
   },
 
@@ -1049,6 +1136,24 @@ export const memoryDb = {
       }
       return existing;
     },
+    async findFirst({ where }: { where?: any } = {}) {
+      for (const item of memoryStore.navigationItems.values()) {
+        if (where?.menu && item.menu !== where.menu) continue;
+        if (where?.label && item.label !== where.label) continue;
+        if (where?.destination && item.destination !== where.destination) continue;
+        return { ...item };
+      }
+      return null;
+    },
+    async deleteMany({ where }: { where?: any } = {}) {
+      let count = 0;
+      for (const [id, item] of Array.from(memoryStore.navigationItems.entries())) {
+        if (where?.menu && item.menu !== where.menu) continue;
+        memoryStore.navigationItems.delete(id);
+        count++;
+      }
+      return { count };
+    },
   },
 
   footerSettings: {
@@ -1233,6 +1338,22 @@ export const memoryDb = {
       return post;
     },
 
+    async upsert({ where, create, update, include }: { where: { slug?: string; id?: string }; create: any; update: any; include?: any }) {
+      let existing: any = null;
+      if (where.slug) {
+        for (const p of memoryStore.blogPosts.values()) {
+          if (p.slug === where.slug) { existing = p; break; }
+        }
+      } else if (where.id) {
+        existing = memoryStore.blogPosts.get(where.id);
+      }
+      if (existing) {
+        return memoryDb.blogPost.update({ where: { id: existing.id }, data: update, include });
+      } else {
+        return memoryDb.blogPost.create({ data: create, include });
+      }
+    },
+
     async count({ where }: { where?: any } = {}) {
       return filterBlogPosts(where).length;
     },
@@ -1300,6 +1421,22 @@ export const memoryDb = {
       if (!existing) throw new Error(`BlogCategory not found: ${where.id}`);
       memoryStore.blogCategories.delete(where.id);
       return existing;
+    },
+
+    async upsert({ where, create, update }: { where: { slug?: string; id?: string }; create: any; update: any }) {
+      let existing: any = null;
+      if (where.slug) {
+        for (const c of memoryStore.blogCategories.values()) {
+          if (c.slug === where.slug) { existing = c; break; }
+        }
+      } else if (where.id) {
+        existing = memoryStore.blogCategories.get(where.id);
+      }
+      if (existing) {
+        return memoryDb.blogCategory.update({ where: { id: existing.id }, data: update });
+      } else {
+        return memoryDb.blogCategory.create({ data: create });
+      }
     },
 
     async count() {
@@ -1372,6 +1509,22 @@ export const memoryDb = {
         }
       }
       return existing;
+    },
+
+    async upsert({ where, create, update }: { where: { slug?: string; id?: string }; create: any; update: any }) {
+      let existing: any = null;
+      if (where.slug) {
+        for (const t of memoryStore.blogTags.values()) {
+          if (t.slug === where.slug) { existing = t; break; }
+        }
+      } else if (where.id) {
+        existing = memoryStore.blogTags.get(where.id);
+      }
+      if (existing) {
+        return memoryDb.blogTag.update({ where: { id: existing.id }, data: update });
+      } else {
+        return memoryDb.blogTag.create({ data: create });
+      }
     },
 
     async count() {
@@ -1653,6 +1806,21 @@ export const memoryDb = {
       }
       return existing;
     },
+    async upsert({ where, create, update, include }: any) {
+      let existing: any = null;
+      if (where.filename) {
+        for (const m of memoryStore.mediaAssets.values()) {
+          if (m.filename === where.filename) { existing = m; break; }
+        }
+      } else if (where.id) {
+        existing = memoryStore.mediaAssets.get(where.id);
+      }
+      if (existing) {
+        return memoryDb.mediaAsset.update({ where: { id: existing.id }, data: update, include });
+      } else {
+        return memoryDb.mediaAsset.create({ data: create, include });
+      }
+    },
   },
   formatContent: {
     async findUnique({ where }: any) {
@@ -1807,6 +1975,50 @@ function createResilientDb(): typeof memoryDb | typeof prisma {
     get(_target, modelProp: string) {
       if (modelProp === '$disconnect' || modelProp === '$connect') {
         return async () => {};
+      }
+
+      if (modelProp === '$transaction') {
+        const isProd = process.env.NODE_ENV === 'production';
+        const isDbConfigured = shouldUsePrisma();
+        const now = Date.now();
+        const shouldAttemptPrisma =
+          isDbConfigured &&
+          (!prismaUnreachable || now - lastFailureTime > RETRY_INTERVAL_MS);
+
+        if (!shouldAttemptPrisma) {
+          if (isProd) {
+            return async function () {
+              const reason = !isDbConfigured
+                ? 'DATABASE_URL environment variable is missing or invalid in production'
+                : 'PostgreSQL database server is unreachable';
+              throw new DatabasePersistenceError(`Database persistence unavailable: ${reason}. Write operation aborted to prevent silent data loss.`);
+            };
+          }
+          return (fnOrArray: any) => memoryDb.$transaction(fnOrArray);
+        }
+
+        return async (...args: any[]) => {
+          try {
+            const result = await (prisma as any).$transaction(...args);
+            if (prismaUnreachable) {
+              console.info('[DB Connection] PostgreSQL connection re-established successfully.');
+              prismaUnreachable = false;
+            }
+            return result;
+          } catch (err: any) {
+            if (isConnectionError(err) || isSchemaError(err)) {
+              if (isConnectionError(err)) {
+                prismaUnreachable = true;
+                lastFailureTime = Date.now();
+              }
+              if (isProd) {
+                throw new DatabasePersistenceError(`Database persistence unavailable: PostgreSQL error during transaction.`);
+              }
+              return memoryDb.$transaction(args[0]);
+            }
+            throw err;
+          }
+        };
       }
 
       const now = Date.now();

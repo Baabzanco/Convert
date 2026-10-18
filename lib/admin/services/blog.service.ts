@@ -15,6 +15,7 @@ import {
   validateCategoryPayload,
   validateTagPayload,
 } from '../validation';
+import { hasPermission } from '../permissions';
 
 /**
  * Calculates estimated reading time based on standard 200 words per minute.
@@ -200,6 +201,11 @@ export async function createDraft(
 
   const readingTime = calculateReadingTime(validation.sanitized.content);
   const status = input.status || 'DRAFT';
+
+  if ((status === 'PUBLISHED' || status === 'SCHEDULED') && !hasPermission(author.role, 'PUBLISH_CONTENT')) {
+    throw new Error(`Forbidden: Role '${author.role}' lacks 'PUBLISH_CONTENT' permission to publish or schedule blog posts.`);
+  }
+
   const publishedAt = status === 'PUBLISHED' ? (input.publishedAt ? new Date(input.publishedAt) : new Date()) : null;
   const scheduledFor = input.scheduledFor ? new Date(input.scheduledFor) : null;
 
@@ -292,6 +298,16 @@ export async function updateDraft(
 
   const postId = existing.id;
 
+  // Enforce publication authorization: users lacking PUBLISH_CONTENT cannot mutate published or scheduled blog posts
+  if ((existing.status === 'PUBLISHED' || existing.status === 'SCHEDULED') && !hasPermission(author.role, 'PUBLISH_CONTENT')) {
+    throw new Error(`Forbidden: Role '${author.role}' lacks 'PUBLISH_CONTENT' permission to modify published or scheduled blog posts.`);
+  }
+
+  // Enforce publication authorization: users lacking PUBLISH_CONTENT cannot transition a draft to published or scheduled
+  if ((input.status === 'PUBLISHED' || input.status === 'SCHEDULED') && !hasPermission(author.role, 'PUBLISH_CONTENT')) {
+    throw new Error(`Forbidden: Role '${author.role}' lacks 'PUBLISH_CONTENT' permission to publish or schedule blog posts.`);
+  }
+
   const validation = validateBlogPostPayload({
     title: input.title !== undefined ? input.title : existing.title,
     slug: input.slug !== undefined ? input.slug : existing.slug,
@@ -339,6 +355,8 @@ export async function updateDraft(
 
   if (input.publishedAt !== undefined) {
     updateData.publishedAt = input.publishedAt ? new Date(input.publishedAt) : null;
+  } else if (input.status === 'PUBLISHED' && !existing.publishedAt) {
+    updateData.publishedAt = new Date();
   }
   if (input.scheduledFor !== undefined) {
     updateData.scheduledFor = input.scheduledFor ? new Date(input.scheduledFor) : null;
@@ -428,6 +446,10 @@ export async function deletePost(id: string, author: AdminUserSession): Promise<
   }
   if (!existing) {
     throw new Error(`BlogPost not found: ${id}`);
+  }
+
+  if ((existing.status === 'PUBLISHED' || existing.status === 'SCHEDULED') && !hasPermission(author.role, 'PUBLISH_CONTENT')) {
+    throw new Error(`Forbidden: Role '${author.role}' lacks 'PUBLISH_CONTENT' permission to delete published blog posts.`);
   }
 
   const postId = existing.id;
@@ -796,6 +818,10 @@ export async function restoreRevision(
     throw new Error(`BlogPost not found: ${postId}`);
   }
   const actualPostId = post.id;
+
+  if ((post.status === 'PUBLISHED' || post.status === 'SCHEDULED') && !hasPermission(author.role, 'PUBLISH_CONTENT')) {
+    throw new Error(`Forbidden: Role '${author.role}' lacks 'PUBLISH_CONTENT' permission to restore revisions on published posts.`);
+  }
 
   const revision = await db.postRevision.findUnique({ where: { id: revisionId } });
   if (!revision || (revision.postId !== actualPostId && revision.postId !== postId)) {

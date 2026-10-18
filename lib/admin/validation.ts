@@ -32,27 +32,58 @@ export interface ValidationReport {
 }
 
 /**
+ * Strict regex for validating raster image data URLs (PNG, JPEG, WebP, GIF).
+ * Requires exact MIME type format, optional charset, and strictly valid base64 payload.
+ * Rejects SVG, HTML, scripts, deceptive MIME parameters, and malformed structures.
+ */
+export const RASTER_DATA_URL_REGEX =
+  /^data:image\/(png|jpeg|jpg|webp|gif)(?:;charset=[a-zA-Z0-9-]+)?;base64,[a-zA-Z0-9+/=]+$/i;
+
+/**
  * Validates URLs to prevent script injection (XSS) via javascript:, vbscript:, or data: URLs.
+ * Strictly permits safe relative URLs, anchor fragments, http/https, mailto, tel, and validated raster data URLs.
+ * Rejects SVG data URLs, HTML data URLs, protocol-relative //, backslash authority bypasses (/\\, /\), and dangerous schemes.
  */
 export function isSafeUrl(url?: string | null): boolean {
   if (!url || typeof url !== 'string') return true;
-  const trimmed = url.trim().toLowerCase();
+  const trimmed = url.trim();
   if (trimmed === '') return true;
 
-  // Block dangerous schemes
-  const dangerousSchemes = ['javascript:', 'vbscript:', 'data:text/html'];
-  for (const scheme of dangerousSchemes) {
-    if (trimmed.startsWith(scheme)) return false;
+  // Immediately reject backslash authority bypasses (/\\evil.com, /\evil.com, /path\evil)
+  if (trimmed.includes('\\')) {
+    return false;
   }
 
-  // Allow relative URLs, http, https, mailto, tel
+  const lower = trimmed.toLowerCase();
+
+  // Decode entity and control chars for scheme inspection
+  const decoded = lower
+    .replace(/&#x([0-9a-f]+);?/gi, (_: any, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#([0-9]+);?/gi, (_: any, dec: string) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&colon;/gi, ':')
+    .replace(/[\u0000-\u001F\u007F-\u009F\s]/g, '');
+
+  // Block dangerous schemes
   if (
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('#') ||
-    trimmed.startsWith('http://') ||
-    trimmed.startsWith('https://') ||
-    trimmed.startsWith('mailto:') ||
-    trimmed.startsWith('tel:')
+    decoded.startsWith('javascript:') ||
+    decoded.startsWith('vbscript:')
+  ) {
+    return false;
+  }
+
+  // Explicitly validate supported raster image data URLs with strict structure
+  if (lower.startsWith('data:')) {
+    return RASTER_DATA_URL_REGEX.test(trimmed);
+  }
+
+  // Allow safe relative URLs (excluding protocol-relative //), #, http, https, mailto, tel
+  if (
+    (lower.startsWith('/') && !lower.startsWith('//')) ||
+    lower.startsWith('#') ||
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('mailto:') ||
+    lower.startsWith('tel:')
   ) {
     return true;
   }
@@ -69,15 +100,50 @@ export function sanitizeRichTextHtml(rawHtml?: string | null): string {
 
   let sanitized = rawHtml;
 
-  // 1. Remove dangerous tags entirely (script, iframe, object, embed, applet, style, form, input, button)
-  sanitized = sanitized.replace(/<\s*(script|iframe|object|embed|applet|style|form|input|button)[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
-  sanitized = sanitized.replace(/<\s*(script|iframe|object|embed|applet|style|form|input|button)[\s\S]*?>/gi, '');
+  // 1. Recursively remove dangerous tags entirely until fixed point
+  let prev = '';
+  do {
+    prev = sanitized;
+    sanitized = sanitized.replace(/<\s*(script|iframe|object|embed|applet|style|form|input|button)[\s\S]*?<\s*\/\s*\1\s*>/gi, '');
+    sanitized = sanitized.replace(/<\s*(script|iframe|object|embed|applet|style|form|input|button)\b[^>]*\/?>/gi, '');
+  } while (sanitized !== prev);
 
   // 2. Remove inline event handlers (onload, onerror, onclick, onmouseover, etc.)
-  sanitized = sanitized.replace(/\s+on[a-zA-Z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  // Handles whitespace and solidus (/) attribute delimiters, e.g. <img/onerror=alert(1)>
+  do {
+    prev = sanitized;
+    sanitized = sanitized.replace(/(?:[\s/]+)on[a-zA-Z0-9_-]+\s*=\s*(?:["'][^"']*["']|[^\s>]+)/gi, ' ');
+    sanitized = sanitized.replace(/(?:[\s/]+)on[a-zA-Z0-9_-]+\s*(?=[>/\s])/gi, ' ');
+  } while (sanitized !== prev);
 
-  // 3. Remove javascript: or vbscript: in href or src attributes
-  sanitized = sanitized.replace(/\s+(href|src)\s*=\s*["']?\s*(javascript|vbscript):[^"'>\s]+/gi, ' $1="#"');
+  // 3. Remove dangerous URL schemes in attributes (quoted, unquoted, entity-encoded, solidus-separated)
+  sanitized = sanitized.replace(
+    /(?:[\s/]+)(href|src|cite|poster|background|action|formaction)\s*=\s*(?:(["'])([\s\S]*?)\2|([^\s>]+))/gi,
+    (match, attr, _quote, quotedVal, unquotedVal) => {
+      const urlValue = quotedVal !== undefined ? quotedVal : (unquotedVal || '');
+      const decoded = urlValue
+        .replace(/&#x([0-9a-f]+);?/gi, (_: any, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+        .replace(/&#([0-9]+);?/gi, (_: any, dec: string) => String.fromCharCode(parseInt(dec, 10)))
+        .replace(/&colon;/gi, ':')
+        .replace(/&tab;/gi, '')
+        .replace(/&newline;/gi, '')
+        .replace(/[\u0000-\u001F\u007F-\u009F\s]/g, '')
+        .toLowerCase();
+
+      const isDangerousData =
+        decoded.startsWith('data:') &&
+        !RASTER_DATA_URL_REGEX.test(urlValue.trim());
+
+      if (
+        decoded.startsWith('javascript:') ||
+        decoded.startsWith('vbscript:') ||
+        isDangerousData
+      ) {
+        return ` ${attr}="#"`;
+      }
+      return match;
+    }
+  );
 
   return sanitized;
 }
@@ -158,30 +224,37 @@ export function sanitizeCustomHtml(rawHtml?: string | null): string {
   } while (sanitized !== prev);
 
   // 4. Recursive removal of inline event handlers (on* attributes like onerror, onload, onclick, ontoggle)
-  // Handles quoted, unquoted, whitespace-separated, and newline variations
+  // Handles quoted, unquoted, whitespace-separated, solidus-separated (/), and newline variations
   do {
     prev = sanitized;
-    sanitized = sanitized.replace(/\s+on[a-zA-Z0-9_-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-    sanitized = sanitized.replace(/\s+on[a-zA-Z0-9_-]+\s*(?=[>/\s])/gi, '');
+    sanitized = sanitized.replace(/(?:[\s/]+)on[a-zA-Z0-9_-]+\s*=\s*(?:["'][^"']*["']|[^\s>]+)/gi, ' ');
+    sanitized = sanitized.replace(/(?:[\s/]+)on[a-zA-Z0-9_-]+\s*(?=[>/\s])/gi, ' ');
   } while (sanitized !== prev);
 
-  // 5. Sanitize dangerous URL schemes in attributes (href, src, cite, poster, background, action)
-  // Strips javascript:, vbscript:, and data:text/html (including entity-encoded variations)
+  // 5. Sanitize dangerous URL schemes in attributes (href, src, cite, poster, background, action, formaction)
+  // Strips javascript:, vbscript:, and unsafe data: (including entity-encoded, unquoted, and solidus-separated variations)
   sanitized = sanitized.replace(
-    /\s+(href|src|cite|poster|background|action)\s*=\s*(["'])([\s\S]*?)\2/gi,
-    (match, attr, quote, urlValue) => {
-      // Decode HTML entities in URL for safe comparison
+    /(?:[\s/]+)(href|src|cite|poster|background|action|formaction)\s*=\s*(?:(["'])([\s\S]*?)\2|([^\s>]+))/gi,
+    (match, attr, _quote, quotedVal, unquotedVal) => {
+      const urlValue = quotedVal !== undefined ? quotedVal : (unquotedVal || '');
+      // Decode HTML entities and strip whitespace/control chars for safe comparison
       const decoded = urlValue
         .replace(/&#x([0-9a-f]+);?/gi, (_: any, hex: string) => String.fromCharCode(parseInt(hex, 16)))
         .replace(/&#([0-9]+);?/gi, (_: any, dec: string) => String.fromCharCode(parseInt(dec, 10)))
+        .replace(/&colon;/gi, ':')
+        .replace(/&tab;/gi, '')
+        .replace(/&newline;/gi, '')
         .replace(/[\u0000-\u001F\u007F-\u009F\s]/g, '')
         .toLowerCase();
+
+      const isDangerousData =
+        decoded.startsWith('data:') &&
+        !RASTER_DATA_URL_REGEX.test(urlValue.trim());
 
       if (
         decoded.startsWith('javascript:') ||
         decoded.startsWith('vbscript:') ||
-        decoded.startsWith('data:text/html') ||
-        decoded.startsWith('data:application/')
+        isDangerousData
       ) {
         return ` ${attr}="#"`;
       }

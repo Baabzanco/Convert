@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminAuth } from '@/lib/admin/guard';
-import { restoreRevision } from '@/lib/admin/services/blog.service';
+import { hasPermission } from '@/lib/admin/permissions';
+import { restoreRevision, getPostById, getPostBySlug } from '@/lib/admin/services/blog.service';
+import { handleAdminApiError } from '@/lib/admin/api-error';
 
 interface RouteParams {
   params: Promise<{ id: string; revisionId: string }>;
@@ -12,10 +14,27 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
   const { id, revisionId } = await params;
   try {
-    const post = await restoreRevision(id, revisionId, auth.user);
-    return NextResponse.json({ post, message: 'Revision restored successfully' });
+    let post = await getPostById(id);
+    if (!post) {
+      post = await getPostBySlug(id);
+    }
+    if (!post) {
+      return NextResponse.json({ error: `BlogPost not found: ${id}` }, { status: 404 });
+    }
+
+    if ((post.status === 'PUBLISHED' || post.status === 'SCHEDULED') && !hasPermission(auth.user.role, 'PUBLISH_CONTENT')) {
+      return NextResponse.json(
+        {
+          error: `Forbidden: Role '${auth.user.role}' lacks 'PUBLISH_CONTENT' permission to restore revisions on published posts.`,
+          failureType: 'forbidden',
+        },
+        { status: 403 }
+      );
+    }
+
+    const updated = await restoreRevision(post.id, revisionId, auth.user);
+    return NextResponse.json({ post: updated, message: 'Revision restored successfully' });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Failed to restore revision';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return handleAdminApiError(err);
   }
 }

@@ -78,7 +78,7 @@ import {
   updateBlockInTree,
   deleteBlockFromTree,
 } from '@/lib/cms/blocks';
-import { sanitizeCustomHtml, scopeAndSanitizeCss } from '@/lib/admin/validation';
+import { sanitizeCustomHtml, scopeAndSanitizeCss, sanitizeRichTextHtml } from '@/lib/admin/validation';
 import {
   DEFAULT_CONTAINER_SETTINGS,
   getContainerWrapperClasses,
@@ -176,7 +176,7 @@ function CmsToolBlock({
             )}
             <div className="text-base text-[#5E6488] leading-relaxed space-y-3">
               {content.html ? (
-                <div dangerouslySetInnerHTML={{ __html: content.html }} />
+                <div dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(content.html) }} />
               ) : (
                 <p>{content.text}</p>
               )}
@@ -343,7 +343,7 @@ function CmsToolBlock({
       return (
         <div
           className="text-base text-[#5E6488] leading-relaxed space-y-3 my-3"
-          dangerouslySetInnerHTML={{ __html: content.html || '' }}
+          dangerouslySetInnerHTML={{ __html: sanitizeRichTextHtml(content.html || '') }}
         />
       );
 
